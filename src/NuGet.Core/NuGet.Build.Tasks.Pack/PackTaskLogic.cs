@@ -328,7 +328,6 @@ namespace NuGet.Build.Tasks.Pack
             return version;
         }
 
-
         private LockFile GetAssetsFile(IPackTaskRequest<IMSBuildItem> request)
         {
             if (request.PackItem == null)

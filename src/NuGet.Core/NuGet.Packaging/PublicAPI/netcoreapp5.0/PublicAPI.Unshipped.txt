@@ -1,0 +1,1 @@
+static NuGet.Packaging.Rules.AnalysisResources.InvalidUndottedFrameworkWarning.get -> string
