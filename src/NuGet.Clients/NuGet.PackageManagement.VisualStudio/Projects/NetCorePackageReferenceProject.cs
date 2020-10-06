@@ -213,6 +213,7 @@ namespace NuGet.PackageManagement.VisualStudio
                 frameworkInfo.ProjectReferences = projectReferences;
             }
         }
+
         #endregion
 
         #region NuGetProject
