@@ -15,11 +15,13 @@ using Microsoft.ServiceHub.Framework.Services;
 using Microsoft.VisualStudio.Threading;
 using NuGet.Packaging;
 using NuGet.Packaging.Core;
+using NuGet.Packaging.Signing;
 using NuGet.ProjectManagement;
 using NuGet.Protocol.Core.Types;
 using NuGet.Resolver;
 using NuGet.VisualStudio;
 using NuGet.VisualStudio.Internal.Contracts;
+using StreamJsonRpc;
 
 namespace NuGet.PackageManagement.VisualStudio
 {
@@ -218,38 +220,58 @@ namespace NuGet.PackageManagement.VisualStudio
 
             cancellationToken.ThrowIfCancellationRequested();
 
-            INuGetProjectContext projectContext = await ServiceLocator.GetInstanceAsync<INuGetProjectContext>();
+            INuGetProjectContext? projectContext = null;
 
-            Assumes.NotNull(projectContext);
-
-            if (IsDirectInstall(actions))
+            try
             {
-                NuGetPackageManager.SetDirectInstall(_state.PackageIdentity, projectContext);
-            }
+                projectContext = await ServiceLocator.GetInstanceAsync<INuGetProjectContext>();
 
-            var nugetProjectActions = new List<NuGetProjectAction>();
+                Assumes.NotNull(projectContext);
 
-            foreach (ProjectAction action in actions)
-            {
-                if (_state.ResolvedActions.TryGetValue(action.Id, out ResolvedAction resolvedAction))
+                if (IsDirectInstall(actions))
                 {
-                    nugetProjectActions.Add(resolvedAction.Action);
+                    NuGetPackageManager.SetDirectInstall(_state.PackageIdentity, projectContext);
+                }
+
+                var nugetProjectActions = new List<NuGetProjectAction>();
+
+                foreach (ProjectAction action in actions)
+                {
+                    if (_state.ResolvedActions.TryGetValue(action.Id, out ResolvedAction resolvedAction))
+                    {
+                        nugetProjectActions.Add(resolvedAction.Action);
+                    }
+                }
+
+                Assumes.NotNullOrEmpty(nugetProjectActions);
+
+                NuGetPackageManager packageManager = await _sharedState.PackageManager.GetValueAsync(cancellationToken);
+                IEnumerable<NuGetProject> projects = nugetProjectActions.Select(action => action.Project);
+
+                await packageManager.ExecuteNuGetProjectActionsAsync(
+                    projects,
+                    nugetProjectActions,
+                    projectContext,
+                    _state.SourceCacheContext,
+                    cancellationToken);
+            }
+            catch (Exception ex)
+            {
+                var exception = new LocalRpcException(ex.Message, ex)
+                {
+                    ErrorCode = (int)RemoteErrorCode.RemoteError,
+                    ErrorData = RemoteErrorUtility.ToRemoteError(ex)
+                };
+
+                throw exception;
+            }
+            finally
+            {
+                if (projectContext != null)
+                {
+                    NuGetPackageManager.ClearDirectInstall(projectContext);
                 }
             }
-
-            Assumes.NotNullOrEmpty(nugetProjectActions);
-
-            NuGetPackageManager packageManager = await _sharedState.PackageManager.GetValueAsync(cancellationToken);
-            IEnumerable<NuGetProject> projects = nugetProjectActions.Select(action => action.Project);
-
-            await packageManager.ExecuteNuGetProjectActionsAsync(
-                projects,
-                nugetProjectActions,
-                projectContext,
-                _state.SourceCacheContext,
-                cancellationToken);
-
-            NuGetPackageManager.ClearDirectInstall(projectContext);
         }
 
         public async ValueTask<IReadOnlyList<ProjectAction>> GetInstallActionsAsync(
