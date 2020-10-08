@@ -110,13 +110,15 @@ namespace NuGet.ContentModel
             {
                 var definition = definitions[definitionsIdx];
                 var itemGroups = FindItemGroups(definition).ToList();
-                foreach (var criteriaEntry in criteria.Entries)
+                for (var criteriaIdx = 0; criteriaIdx < criteria.Entries.Count; criteriaIdx++)
                 {
+                    var criteriaEntry = criteria.Entries[criteriaIdx];
                     ContentItemGroup bestGroup = null;
                     var bestAmbiguity = false;
 
-                    foreach (var itemGroup in itemGroups)
+                    for (var itemGroupIdx = 0; itemGroupIdx < itemGroups.Count; itemGroupIdx++)
                     {
+                        var itemGroup = itemGroups[itemGroupIdx];
                         var groupIsValid = true;
                         foreach (var criteriaProperty in criteriaEntry.Properties)
                         {
