@@ -61,9 +61,8 @@ namespace NuGet.ContentModel
                 for (var assetIdx = 0; assetIdx < _assets.Count; assetIdx++)
                 {
                     var asset = _assets[assetIdx];
-                    for (var groupPatternIdx = 0; groupPatternIdx < groupPatterns.Length; groupPatternIdx++)
+                    foreach (var groupPattern in groupPatterns)
                     {
-                        var groupPattern = groupPatterns[groupPatternIdx];
                         var item = groupPattern.Match(asset.Path, definition.PropertyDefinitions);
                         if (item != null)
                         {
@@ -106,9 +105,8 @@ namespace NuGet.ContentModel
 
         public ContentItemGroup FindBestItemGroup(SelectionCriteria criteria, params PatternSet[] definitions)
         {
-            for (var definitionsIdx = 0; definitionsIdx < definitions.Length; definitionsIdx++)
+            foreach (var definition in definitions)
             {
-                var definition = definitions[definitionsIdx];
                 var itemGroups = FindItemGroups(definition).ToList();
                 for (var criteriaIdx = 0; criteriaIdx < criteria.Entries.Count; criteriaIdx++)
                 {

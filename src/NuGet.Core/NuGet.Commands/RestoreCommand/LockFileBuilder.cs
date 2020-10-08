@@ -43,6 +43,8 @@ namespace NuGet.Commands
                 Version = _lockFileVersion
             };
 
+            // TODO: I don;t think thi is needed anymore
+            // In NoOp scenario this code is not even executed
             var previousLibraries = previousLockFile?.Libraries.ToDictionary(l => Tuple.Create(l.Name, l.Version));
 
             if (project.RestoreMetadata?.ProjectStyle == ProjectStyle.PackageReference ||
@@ -208,6 +210,7 @@ namespace NuGet.Commands
                     }
                     else if (library.Type == LibraryType.Package)
                     {
+                        // TODO: Potential for caching
                         var packageInfo = NuGetv3LocalRepositoryUtility.GetPackage(localRepositories, library.Name, library.Version);
 
                         if (packageInfo == null)
@@ -216,6 +219,7 @@ namespace NuGet.Commands
                         }
 
                         var package = packageInfo.Package;
+                        // TODO: Use Dictionary ?
                         var libraryDependency = tfi.Dependencies.FirstOrDefault(e => e.Name.Equals(library.Name, StringComparison.OrdinalIgnoreCase));
 
                         var targetLibrary = LockFileUtils.CreateLockFileTargetLibrary(
@@ -370,7 +374,7 @@ namespace NuGet.Commands
             }
 
             // Do not pack anything from the runtime graphs
-            // The runtime graphs are added in addition to the graphs without a runtime 
+            // The runtime graphs are added in addition to the graphs without a runtime
             foreach (var targetGraph in targetGraphs.Where(targetGraph => string.IsNullOrEmpty(targetGraph.RuntimeIdentifier)))
             {
                 var centralPackageVersionsForFramework = project.TargetFrameworks.Where(tfmi => tfmi.FrameworkName.Equals(targetGraph.Framework)).FirstOrDefault()?.CentralPackageVersions;
