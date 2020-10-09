@@ -2,6 +2,7 @@
 // Licensed under the Apache License, Version 2.0. See License.txt in the project root for license information.
 
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
@@ -20,8 +21,8 @@ namespace NuGet.Commands
         private readonly int _lockFileVersion;
         private readonly ILogger _logger;
         private readonly Dictionary<RestoreTargetGraph, Dictionary<string, LibraryIncludeFlags>> _includeFlagGraphs;
-        private readonly Dictionary<Tuple<LibraryDependency, LockFileLibrary, RestoreTargetGraph, LibraryIncludeFlags, NuGetFramework>, LockFileTargetLibrary> _lockFileTargetLibraryCache =
-            new Dictionary<Tuple<LibraryDependency, LockFileLibrary, RestoreTargetGraph, LibraryIncludeFlags, NuGetFramework>, LockFileTargetLibrary>();
+        private static readonly ConcurrentDictionary<Tuple<LibraryDependency, LockFileLibrary, RestoreTargetGraph, LibraryIncludeFlags, NuGetFramework>, LockFileTargetLibrary> _lockFileTargetLibraryCache =
+            new ConcurrentDictionary<Tuple<LibraryDependency, LockFileLibrary, RestoreTargetGraph, LibraryIncludeFlags, NuGetFramework>, LockFileTargetLibrary>();
 
         public LockFileBuilder(int lockFileVersion,
             ILogger logger,
@@ -224,26 +225,18 @@ namespace NuGet.Commands
                         var libraryDependency = tfi.Dependencies.FirstOrDefault(e => e.Name.Equals(library.Name, StringComparison.OrdinalIgnoreCase));
 
                         var lockFileLibrary = libraries[Tuple.Create(library.Name, library.Version)];
-                        LockFileTargetLibrary targetLibrary;
-                        lock (_lockFileTargetLibraryCache)
-                        {
-                            var key = Tuple.Create(libraryDependency, lockFileLibrary, targetGraph, includeFlags, (NuGetFramework)null);
-                            if (!_lockFileTargetLibraryCache.TryGetValue(key,
-                                out targetLibrary))
-                            {
-                                targetLibrary = LockFileUtils.CreateLockFileTargetLibrary(
-                                    libraryDependency,
-                                    libraries[Tuple.Create(library.Name, library.Version)],
-                                    package,
-                                    targetGraph,
-                                    dependencyType: includeFlags,
-                                    targetFrameworkOverride: null,
-                                    dependencies: graphItem.Data.Dependencies,
-                                    cache: builderCache);
-                            }
 
-                            _lockFileTargetLibraryCache.Add(key, targetLibrary);
-                        }
+                        var targetLibrary = _lockFileTargetLibraryCache.GetOrAdd(Tuple.Create(libraryDependency, lockFileLibrary, (RestoreTargetGraph) null,
+                            includeFlags, (NuGetFramework) null), _ =>
+                            LockFileUtils.CreateLockFileTargetLibrary(
+                                libraryDependency,
+                                libraries[Tuple.Create(library.Name, library.Version)],
+                                package,
+                                targetGraph,
+                                dependencyType: includeFlags,
+                                targetFrameworkOverride: null,
+                                dependencies: graphItem.Data.Dependencies,
+                                cache: builderCache));
 
                         target.Libraries.Add(targetLibrary);
 
@@ -252,14 +245,10 @@ namespace NuGet.Commands
                         {
                             var nonFallbackFramework = new NuGetFramework(target.TargetFramework);
 
-                            LockFileTargetLibrary targetLibraryWithoutFallback;
-                            lock (_lockFileTargetLibraryCache)
-                            {
-                                var key = Tuple.Create(libraryDependency, lockFileLibrary, targetGraph, includeFlags, nonFallbackFramework);
-                                if (!_lockFileTargetLibraryCache.TryGetValue(key,
-                                    out targetLibraryWithoutFallback))
-                                {
-                                    targetLibraryWithoutFallback = LockFileUtils.CreateLockFileTargetLibrary(
+                            var targetLibraryWithoutFallback = _lockFileTargetLibraryCache.GetOrAdd(
+                                Tuple.Create(libraryDependency, lockFileLibrary, (RestoreTargetGraph) null,
+                                    includeFlags, nonFallbackFramework), _ =>
+                                    LockFileUtils.CreateLockFileTargetLibrary(
                                         libraryDependency,
                                         lockFileLibrary,
                                         package,
@@ -267,11 +256,8 @@ namespace NuGet.Commands
                                         targetFrameworkOverride: nonFallbackFramework,
                                         dependencyType: includeFlags,
                                         dependencies: graphItem.Data.Dependencies,
-                                        cache: builderCache);
-                                }
+                                        cache: builderCache));
 
-                                _lockFileTargetLibraryCache.Add(key, targetLibrary);
-                            }
 
                             if (!targetLibrary.Equals(targetLibraryWithoutFallback))
                             {
