@@ -14,13 +14,15 @@ namespace NuGet.DependencyResolver
         {
             Key = key;
             InnerNodes = new List<GraphNode<TItem>>();
+            OuterNodes = new List<GraphNode<TItem>>();
             Disposition = Disposition.Acceptable;
             ParentNodes = new List<GraphNode<TItem>>();
         }
 
         public LibraryRange Key { get; set; }
         public GraphItem<TItem> Item { get; set; }
-        public GraphNode<TItem> OuterNode { get; set; }
+
+        public IList<GraphNode<TItem>> OuterNodes { get; }
         public IList<GraphNode<TItem>> InnerNodes { get; set; }
         public Disposition Disposition { get; set; }
 

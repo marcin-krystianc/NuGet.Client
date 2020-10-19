@@ -85,7 +85,7 @@ namespace NuGet.DependencyResolver
             //      -> D 2.0
             //
             // 2. This occurs if none of the sources have version C 1.0 so C 1.0 is bumped up to C 2.0.
-            // 
+            //
             //   A -> B -> C 2.0
             //     -> C 1.0
 
@@ -98,7 +98,10 @@ namespace NuGet.DependencyResolver
 
                 // Remove this node from the tree so the nothing else evaluates this.
                 // This is ok since we have a parent pointer and we can still print the path
-                node.OuterNode.InnerNodes.Remove(node);
+                foreach (var outerNode in node.OuterNodes)
+                {
+                    outerNode.InnerNodes.Remove(node);
+                }
 
                 return;
             }
@@ -110,7 +113,7 @@ namespace NuGet.DependencyResolver
 
             // REVIEW: This could probably be done in a single pass where we keep track
             // of what is nearer as we walk down the graph (BFS)
-            for (var n = node.OuterNode; n != null; n = n.OuterNode)
+            for (var n = node.OuterNodes.FirstOrDefault(); n != null; n = n.OuterNodes.FirstOrDefault())
             {
                 var innerNodes = n.InnerNodes;
                 var count = innerNodes.Count;
@@ -146,7 +149,10 @@ namespace NuGet.DependencyResolver
 
             // Remove this node from the tree so the nothing else evaluates this.
             // This is ok since we have a parent pointer and we can still print the path
-            node.OuterNode.InnerNodes.Remove(node);
+            foreach (var outerNode in node.OuterNodes)
+            {
+                outerNode.InnerNodes.Remove(node);
+            }
         }
 
         /// <summary>
@@ -160,7 +166,7 @@ namespace NuGet.DependencyResolver
             while (current != null)
             {
                 nodeStrings.Push(current.GetIdAndVersionOrRange());
-                current = current.OuterNode;
+                current = current.OuterNodes.FirstOrDefault();
             }
 
             return string.Join(NodeArrow, nodeStrings);
@@ -179,7 +185,7 @@ namespace NuGet.DependencyResolver
                 // Display the range for the last node, show the version of all parents.
                 var nodeString = nodeStrings.Count == 0 ? current.GetIdAndRange() : current.GetIdAndVersionOrRange();
                 nodeStrings.Push(nodeString);
-                current = current.OuterNode;
+                current = current.OuterNodes.FirstOrDefault();
             }
 
             return string.Join(NodeArrow, nodeStrings);
@@ -316,7 +322,7 @@ namespace NuGet.DependencyResolver
 
         private static bool TryResolveConflicts<TItem>(this GraphNode<TItem> root, List<VersionConflictResult<TItem>> versionConflicts)
         {
-            // now we walk the tree as often as it takes to determine 
+            // now we walk the tree as often as it takes to determine
             // which paths are accepted or rejected, based on conflicts occuring
             // between cousin packages
 
@@ -424,7 +430,7 @@ namespace NuGet.DependencyResolver
             // a1->b1->d1->x1
             // a1->c1->d2->z1
             // first attempt
-            //  d1/d2 are considered disputed 
+            //  d1/d2 are considered disputed
             //  x1 and z1 are considered ambiguous
             //  d1 is rejected
             // second attempt
