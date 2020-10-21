@@ -217,7 +217,14 @@ namespace NuGet.DependencyResolver
                             };
 
                             dependencyNode.OuterNode = node;
-                            node.InnerNodes.Add(dependencyNode);
+                            if (node.InnerNodes == null)
+                            {
+                                node.InnerNodes = new List<GraphNode<RemoteResolveResult>>{dependencyNode};
+                            }
+                            else
+                            {
+                                node.InnerNodes.Add(dependencyNode);
+                            }
                         }
                     }
                 }
@@ -233,7 +240,14 @@ namespace NuGet.DependencyResolver
                 var dependencyNode = await task;
                 dependencyNode.OuterNode = node;
 
-                node.InnerNodes.Add(dependencyNode);
+                if (node.InnerNodes == null)
+                {
+                    node.InnerNodes = new List<GraphNode<RemoteResolveResult>> {dependencyNode};
+                }
+                else
+                {
+                    node.InnerNodes.Add(dependencyNode);
+                }
             }
 
             return node;

@@ -85,7 +85,7 @@ namespace NuGet.DependencyResolver
             //      -> D 2.0
             //
             // 2. This occurs if none of the sources have version C 1.0 so C 1.0 is bumped up to C 2.0.
-            // 
+            //
             //   A -> B -> C 2.0
             //     -> C 1.0
 
@@ -316,7 +316,7 @@ namespace NuGet.DependencyResolver
 
         private static bool TryResolveConflicts<TItem>(this GraphNode<TItem> root, List<VersionConflictResult<TItem>> versionConflicts)
         {
-            // now we walk the tree as often as it takes to determine 
+            // now we walk the tree as often as it takes to determine
             // which paths are accepted or rejected, based on conflicts occuring
             // between cousin packages
 
@@ -328,8 +328,8 @@ namespace NuGet.DependencyResolver
             var tracker = Cache<TItem>.RentTracker();
             Func<GraphNode<TItem>, bool> skipNode = null;
 
-            var centralTransitiveNodes = root.InnerNodes.Where(n => n.Item.IsCentralTransitive).ToList();
-            var hasCentralTransitiveDependencies = centralTransitiveNodes.Count > 0;
+            var centralTransitiveNodes = root.InnerNodes?.Where(n => n.Item.IsCentralTransitive).ToList();
+            var hasCentralTransitiveDependencies = centralTransitiveNodes?.Count > 0;
             if (hasCentralTransitiveDependencies)
             {
                 skipNode = (node) => { return node.Item.IsCentralTransitive; };
@@ -384,6 +384,9 @@ namespace NuGet.DependencyResolver
             // For all accepted nodes, find dependencies that aren't satisfied by the version
             // of the package that we have selected
             var innerNodes = node.InnerNodes;
+            if (innerNodes == null)
+                return;
+
             var count = innerNodes.Count;
             for (var i = 0; i < count; i++)
             {
@@ -424,7 +427,7 @@ namespace NuGet.DependencyResolver
             // a1->b1->d1->x1
             // a1->c1->d2->z1
             // first attempt
-            //  d1/d2 are considered disputed 
+            //  d1/d2 are considered disputed
             //  x1 and z1 are considered ambiguous
             //  d1 is rejected
             // second attempt
@@ -610,6 +613,9 @@ namespace NuGet.DependencyResolver
 
         private static void AddInnerNodesToQueue<TItem, TState>(IList<GraphNode<TItem>> innerNodes, Queue<NodeWithState<TItem, TState>> queue, TState innerState)
         {
+            if (innerNodes == null)
+                return;
+
             var count = innerNodes.Count;
             for (var i = 0; i < count; i++)
             {
@@ -620,6 +626,9 @@ namespace NuGet.DependencyResolver
 
         private static void AddInnerNodesToQueue<TItem>(IList<GraphNode<TItem>> innerNodes, Queue<GraphNode<TItem>> queue)
         {
+            if (innerNodes == null)
+                return;
+
             var count = innerNodes.Count;
             for (var i = 0; i < count; i++)
             {

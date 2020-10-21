@@ -13,9 +13,9 @@ namespace NuGet.DependencyResolver
         public GraphNode(LibraryRange key)
         {
             Key = key;
-            InnerNodes = new List<GraphNode<TItem>>();
+            InnerNodes = null;
             Disposition = Disposition.Acceptable;
-            ParentNodes = new List<GraphNode<TItem>>();
+            ParentNodes = null;
         }
 
         public LibraryRange Key { get; set; }
