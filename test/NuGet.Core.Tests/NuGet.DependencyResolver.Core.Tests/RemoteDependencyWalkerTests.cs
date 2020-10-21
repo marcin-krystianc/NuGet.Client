@@ -1679,7 +1679,7 @@ namespace NuGet.DependencyResolver.Tests
             while (node != null)
             {
                 matches.Insert(0, $"{node.Key.Name} {node.Item?.Key?.Version ?? node.Key.VersionRange.MinVersion}");
-                node = node.OuterNodes.FirstOrDefault();
+                node = node.OuterNode;
             }
 
             Assert.Equal(matches, items);

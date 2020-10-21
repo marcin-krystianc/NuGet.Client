@@ -133,7 +133,7 @@ namespace NuGet.Commands
                             }
 
                             // OuterNode may be null if the project itself conflicts with a package name
-                            var requestor = node.OuterNodes.FirstOrDefault()?.Item.Key ?? node.Item.Key;
+                            var requestor = node.OuterNode == null ? node.Item.Key : node.OuterNode.Item.Key;
 
                             ranges.Add(new ResolverRequest(requestor, node.Key));
                         }
@@ -153,10 +153,10 @@ namespace NuGet.Commands
                         flattened.Add(node.Item);
                     }
 
-                    if (node?.OuterNodes.FirstOrDefault() != null && node.Item.Key.Type != LibraryType.Unresolved)
+                    if (node?.OuterNode != null && node.Item.Key.Type != LibraryType.Unresolved)
                     {
                         var dependencyKey = new ResolvedDependencyKey(
-                            parent: node.OuterNodes.First().Item.Key,
+                            parent: node.OuterNode.Item.Key,
                             range: node.Key.VersionRange,
                             child: node.Item.Key);
 
