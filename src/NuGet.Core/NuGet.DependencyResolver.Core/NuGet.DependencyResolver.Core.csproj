@@ -23,6 +23,7 @@
     <ProjectReference Include="..\..\..\..\lib\CallContextProfiling\CallContextProfiling.csproj" />
     <ProjectReference Include="..\NuGet.LibraryModel\NuGet.LibraryModel.csproj" />
     <ProjectReference Include="..\NuGet.Protocol\NuGet.Protocol.csproj" />
+    <PackageReference Include="System.Collections.Immutable" />
   </ItemGroup>
 
   <ItemGroup>

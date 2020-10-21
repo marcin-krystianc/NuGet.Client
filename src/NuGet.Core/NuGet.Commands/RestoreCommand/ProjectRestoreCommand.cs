@@ -254,21 +254,51 @@ namespace NuGet.Commands
             CancellationToken token)
         {
             var name = FrameworkRuntimePair.GetTargetGraphName(framework, runtimeIdentifier);
-            var graphs = new List<GraphNode<RemoteResolveResult>>
+            List<GraphNode<RemoteResolveResult>> graphs;
+            using (CallContextProfiling.CallContextProfiler.NamedStep("WalkDependenciesAsync/WalkAsync"))
             {
-                await walker.WalkAsync(
-                projectRange,
-                framework,
-                runtimeIdentifier,
-                runtimeGraph,
-                recursive: true)
-            };
+                graphs = new List<GraphNode<RemoteResolveResult>>
+                {
+                    await walker.WalkAsync(
+                        projectRange,
+                        framework,
+                        runtimeIdentifier,
+                        runtimeGraph,
+                        recursive: true)
+                };
+            }
+
+            var root = graphs.Single();
+
+            var dict = new Dictionary<string, int>();
+            root.ForEach((node, _) =>
+            {
+                if (node.Item != null)
+                {
+                    if (dict.ContainsKey(node.Item.Key.ToString()))
+                    {
+                        dict[node.Item.Key.ToString()] += 1;
+                    }
+                    else
+                    {
+                        dict[node.Item.Key.ToString()] = 1;
+                    }
+                }
+            }, dict);
+
+            var tmp = dict
+                .OrderByDescending(x => x.Value)
+                .ToList();
 
             // Resolve conflicts
             await _logger.LogAsync(LogLevel.Verbose, string.Format(CultureInfo.CurrentCulture, Strings.Log_ResolvingConflicts, name));
+            Console.WriteLine($"LibRange:{projectRange}, distinct:{tmp.Count}, total:{tmp.Sum(x => x.Value).ToString()}");
 
-            // Flatten and create the RestoreTargetGraph to hold the packages
-            return RestoreTargetGraph.Create(runtimeGraph, graphs, context, _logger, framework, runtimeIdentifier);
+            using (CallContextProfiling.CallContextProfiler.NamedStep("RestoreTargetGraph.Create"))
+            {
+                // Flatten and create the RestoreTargetGraph to hold the packages
+                return RestoreTargetGraph.Create(runtimeGraph, graphs, context, _logger, framework, runtimeIdentifier);
+            }
         }
 
         private async Task<bool> ResolutionSucceeded(IEnumerable<RestoreTargetGraph> graphs, IList<DownloadDependencyResolutionResult> downloadDependencyResults, RemoteWalkContext context, CancellationToken token)
