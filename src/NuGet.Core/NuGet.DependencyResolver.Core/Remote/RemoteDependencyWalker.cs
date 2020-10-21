@@ -4,6 +4,7 @@
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.Collections.Immutable;
 using System.Diagnostics;
 using System.Linq;
 using System.Threading;
@@ -27,43 +28,48 @@ namespace NuGet.DependencyResolver
         }
 
         public async Task<GraphNode<RemoteResolveResult>> WalkAsync(LibraryRange library, NuGetFramework framework, string runtimeIdentifier, RuntimeGraph runtimeGraph, bool recursive)
-            using (CallContextProfiling.CallContextProfiler.NamedStep("WalkAsync/CreateGraphNode"))
         {
-            var transitiveCentralPackageVersions = new TransitiveCentralPackageVersions();
-            var rootNode = await CreateGraphNode(
-                libraryRange: library,
-                framework: framework,
-                runtimeName: runtimeIdentifier,
-                runtimeGraph: runtimeGraph,
-                predicate: _ => (recursive ? DependencyResult.Acceptable : DependencyResult.Eclipsed, null),
-                outerEdge: null,
-                transitiveCentralPackageVersions: transitiveCentralPackageVersions);
-
-            // do not calculate the hashset of the direct dependencies for cases when there are not any elements in the transitiveCentralPackageVersions queue
-            var indexedDirectDependenciesKeyNames = new Lazy<HashSet<string>>(
-                () =>
-                {
-                    var result = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-                    result.AddRange(rootNode.InnerNodes.Select(n => n.Key.Name));
-                    return result;
-                });
-
-            var transitiveCentralPackageVersionNodes = new List<GraphNode<RemoteResolveResult>>();
-            while (transitiveCentralPackageVersions.TryTake(out LibraryDependency centralPackageVersionDependency))
+            using (CallContextProfiling.CallContextProfiler.NamedStep("WalkAsync/CreateGraphNode"))
             {
-                // do not add a transitive dependency node if it is direct already
-                if (!indexedDirectDependenciesKeyNames.Value.Contains(centralPackageVersionDependency.Name))
-                {
-                    // as the nodes are created more parents can be added for a single central transitive node
-                    // keep the list of the nodes created and add the parents's references at the end
-                    // the parent references are needed to keep track of possible rejected parents
-                    transitiveCentralPackageVersionNodes.Add(await AddTransitiveCentralPackageVersionNodesAsync(rootNode, centralPackageVersionDependency, framework, runtimeIdentifier, runtimeGraph, transitiveCentralPackageVersions));
-                }
-            }
-            transitiveCentralPackageVersionNodes.ForEach(node => transitiveCentralPackageVersions.AddParentsToNode(node));
+                var directDependencies =
+                    ImmutableDictionary<string, LibraryDependency>.Empty.WithComparers(StringComparer.OrdinalIgnoreCase);
 
-            return rootNode;
-        }
+                var transitiveCentralPackageVersions = new TransitiveCentralPackageVersions();
+                var rootNode = await CreateGraphNode(
+                    libraryRange: library,
+                    framework: framework,
+                    runtimeName: runtimeIdentifier,
+                    runtimeGraph: runtimeGraph,
+                    predicate: directDependencies,
+                    outerEdge: null,
+                    transitiveCentralPackageVersions: transitiveCentralPackageVersions);
+
+                // do not calculate the hashset of the direct dependencies for cases when there are not any elements in the transitiveCentralPackageVersions queue
+                var indexedDirectDependenciesKeyNames = new Lazy<HashSet<string>>(
+                    () =>
+                    {
+                        var result = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                        result.AddRange(rootNode.InnerNodes.Select(n => n.Key.Name));
+                        return result;
+                    });
+
+                var transitiveCentralPackageVersionNodes = new List<GraphNode<RemoteResolveResult>>();
+                while (transitiveCentralPackageVersions.TryTake(out LibraryDependency centralPackageVersionDependency))
+                {
+                    // do not add a transitive dependency node if it is direct already
+                    if (!indexedDirectDependenciesKeyNames.Value.Contains(centralPackageVersionDependency.Name))
+                    {
+                        // as the nodes are created more parents can be added for a single central transitive node
+                        // keep the list of the nodes created and add the parents's references at the end
+                        // the parent references are needed to keep track of possible rejected parents
+                    transitiveCentralPackageVersionNodes.Add(await AddTransitiveCentralPackageVersionNodesAsync(rootNode, centralPackageVersionDependency, framework, runtimeIdentifier, runtimeGraph, transitiveCentralPackageVersions));
+                    }
+                }
+
+                transitiveCentralPackageVersionNodes.ForEach(node => transitiveCentralPackageVersions.AddParentsToNode(node));
+
+                return rootNode;
+            }
         }
 
         private async Task<GraphNode<RemoteResolveResult>> CreateGraphNode(
@@ -71,7 +77,7 @@ namespace NuGet.DependencyResolver
             NuGetFramework framework,
             string runtimeName,
             RuntimeGraph runtimeGraph,
-            Func<LibraryRange, (DependencyResult dependencyResult, LibraryDependency conflictingDependency)> predicate,
+            ImmutableDictionary<string, LibraryDependency> predicate,
             GraphEdge<RemoteResolveResult> outerEdge,
             TransitiveCentralPackageVersions transitiveCentralPackageVersions)
         {
@@ -170,7 +176,7 @@ namespace NuGet.DependencyResolver
                 if (outerEdge == null
                     || dependency.SuppressParent != LibraryIncludeFlags.All)
                 {
-                    var result = predicate(dependency.LibraryRange);
+                    var result = CheckPredicate(predicate, dependency.LibraryRange);
 
                     // Check for a cycle, this is needed for A (project) -> A (package)
                     // since the predicate will not be called for leaf nodes.
@@ -194,7 +200,10 @@ namespace NuGet.DependencyResolver
                             framework,
                             runtimeName,
                             runtimeGraph,
-                            ChainPredicate(predicate, node, dependency),
+                            predicate
+                                .RemoveRange(node.Item.Data.Dependencies.Select(x => x.Name))
+                                .AddRange(node.Item.Data.Dependencies.Select(x =>
+                                new KeyValuePair<string, LibraryDependency>(x.Name, x))),
                             innerEdge,
                             transitiveCentralPackageVersions));
                     }
@@ -241,33 +250,54 @@ namespace NuGet.DependencyResolver
             return node;
         }
 
+        private (DependencyResult dependencyResult, LibraryDependency conflictingDependency) CheckPredicate(ImmutableDictionary<string, LibraryDependency> dict, LibraryRange libraryRange)
+        {
+            if (!dict.TryGetValue(libraryRange.Name, out var existingDependency) ||
+                (libraryRange.TypeConstraint & existingDependency.LibraryRange.TypeConstraint) == LibraryDependencyTarget.None)
+            {
+                return (DependencyResult.Acceptable, null);
+            }
+
+            if (existingDependency.LibraryRange.VersionRange != null &&
+                libraryRange.VersionRange != null &&
+                !IsGreaterThanOrEqualTo(existingDependency.LibraryRange.VersionRange, libraryRange.VersionRange))
+            {
+                return (DependencyResult.PotentiallyDowngraded, existingDependency);
+            }
+
+            return (DependencyResult.Eclipsed, existingDependency);
+        }
+
         private Func<LibraryRange, (DependencyResult dependencyResult, LibraryDependency conflictingDependency)> ChainPredicate(Func<LibraryRange, (DependencyResult dependencyResult, LibraryDependency conflictingDependency)> predicate, GraphNode<RemoteResolveResult> node, LibraryDependency dependency)
         {
             var item = node.Item;
 
             return library =>
             {
-                if (StringComparer.OrdinalIgnoreCase.Equals(item.Data.Match.Library.Name, library.Name))
+                using (CallContextProfiling.CallContextProfiler.NamedStep("ChainPredicate/return"))
                 {
-                    return (DependencyResult.Cycle, null);
-                }
-
-                foreach (var d in item.Data.Dependencies)
-                {
-                    if (d != dependency && library.IsEclipsedBy(d.LibraryRange))
+                    if (StringComparer.OrdinalIgnoreCase.Equals(item.Data.Match.Library.Name, library.Name))
                     {
-                        if (d.LibraryRange.VersionRange != null &&
-                            library.VersionRange != null &&
-                            !IsGreaterThanOrEqualTo(d.LibraryRange.VersionRange, library.VersionRange))
-                        {
-                            return (DependencyResult.PotentiallyDowngraded, d);
-                        }
-
-                        return (DependencyResult.Eclipsed, d);
+                        return (DependencyResult.Cycle, null);
                     }
-                }
 
-                return predicate(library);
+                    foreach (var d in item.Data.Dependencies)
+                    {
+                        if (d != dependency && library.IsEclipsedBy(d.LibraryRange))
+                        {
+                            if (d.LibraryRange.VersionRange != null &&
+                                library.VersionRange != null &&
+                                !IsGreaterThanOrEqualTo(d.LibraryRange.VersionRange, library.VersionRange))
+                            {
+                                return (DependencyResult.PotentiallyDowngraded, d);
+                            }
+
+                            return (DependencyResult.Eclipsed, d);
+                        }
+                    }
+
+                    return predicate(library);
+                }
             };
         }
 
@@ -421,7 +451,7 @@ namespace NuGet.DependencyResolver
                     framework: framework,
                     runtimeName: runtimeIdentifier,
                     runtimeGraph: runtimeGraph,
-                    predicate: ChainPredicate(_ => (DependencyResult.Acceptable, null), rootNode, centralPackageVersionDependency),
+                    predicate: null,
                     outerEdge: null,
                     transitiveCentralPackageVersions: transitiveCentralPackageVersions);
 
