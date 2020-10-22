@@ -31,16 +31,13 @@ namespace NuGet.DependencyResolver
         {
             using (CallContextProfiling.CallContextProfiler.NamedStep("WalkAsync/CreateGraphNode"))
             {
-                var directDependencies =
-                    ImmutableDictionary<string, LibraryDependency>.Empty.WithComparers(StringComparer.OrdinalIgnoreCase);
-
                 var transitiveCentralPackageVersions = new TransitiveCentralPackageVersions();
                 var rootNode = await CreateGraphNode(
                     libraryRange: library,
                     framework: framework,
                     runtimeName: runtimeIdentifier,
                     runtimeGraph: runtimeGraph,
-                    predicate: directDependencies,
+                predicate: _ => (recursive ? DependencyResult.Acceptable : DependencyResult.Eclipsed, null),
                     outerEdge: null,
                     transitiveCentralPackageVersions: transitiveCentralPackageVersions);
 
@@ -65,7 +62,6 @@ namespace NuGet.DependencyResolver
                     transitiveCentralPackageVersionNodes.Add(await AddTransitiveCentralPackageVersionNodesAsync(rootNode, centralPackageVersionDependency, framework, runtimeIdentifier, runtimeGraph, transitiveCentralPackageVersions));
                     }
                 }
-
                 transitiveCentralPackageVersionNodes.ForEach(node => transitiveCentralPackageVersions.AddParentsToNode(node));
 
                 return rootNode;
@@ -77,7 +73,7 @@ namespace NuGet.DependencyResolver
             NuGetFramework framework,
             string runtimeName,
             RuntimeGraph runtimeGraph,
-            ImmutableDictionary<string, LibraryDependency> predicate,
+            Func<LibraryRange, (DependencyResult dependencyResult, LibraryDependency conflictingDependency)> predicate,
             GraphEdge<RemoteResolveResult> outerEdge,
             TransitiveCentralPackageVersions transitiveCentralPackageVersions)
         {
@@ -176,7 +172,7 @@ namespace NuGet.DependencyResolver
                 if (outerEdge == null
                     || dependency.SuppressParent != LibraryIncludeFlags.All)
                 {
-                    var result = CheckPredicate(predicate, dependency.LibraryRange);
+                    var result = predicate(dependency.LibraryRange);
 
                     // Check for a cycle, this is needed for A (project) -> A (package)
                     // since the predicate will not be called for leaf nodes.
@@ -200,10 +196,7 @@ namespace NuGet.DependencyResolver
                             framework,
                             runtimeName,
                             runtimeGraph,
-                            predicate
-                                .RemoveRange(node.Item.Data.Dependencies.Select(x => x.Name))
-                                .AddRange(node.Item.Data.Dependencies.Select(x =>
-                                new KeyValuePair<string, LibraryDependency>(x.Name, x))),
+                            ChainPredicate(predicate, node, dependency),
                             innerEdge,
                             transitiveCentralPackageVersions));
                     }
@@ -451,7 +444,7 @@ namespace NuGet.DependencyResolver
                     framework: framework,
                     runtimeName: runtimeIdentifier,
                     runtimeGraph: runtimeGraph,
-                    predicate: null,
+                    predicate: ChainPredicate(_ => (DependencyResult.Acceptable, null), rootNode, centralPackageVersionDependency),
                     outerEdge: null,
                     transitiveCentralPackageVersions: transitiveCentralPackageVersions);
 
