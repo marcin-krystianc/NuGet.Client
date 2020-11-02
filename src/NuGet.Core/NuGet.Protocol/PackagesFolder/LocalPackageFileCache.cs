@@ -4,6 +4,7 @@
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using NuGet.Common;
@@ -81,15 +82,31 @@ namespace NuGet.Protocol
         /// </summary>
         public bool Sha512Exists(string sha512Path)
         {
+            lock (this)
+            {
+                File.AppendAllText("d:/out.txt", $"PID:{Process.GetCurrentProcess().Id} DateTime:{DateTime.Now}, Sha512Exists:{sha512Path}" + Environment.NewLine);
+            }
+
             // Avoid checking the desk if we have already read the file.
             var exists = _fileExistsCache.ContainsKey(sha512Path);
 
             // Check the file directly if it was not in the cache.
-            if (!exists && File.Exists(sha512Path))
+            if (!exists)
             {
-                // The file exists, add it to the cache
-                _fileExistsCache.TryAdd(sha512Path, true);
-                exists = true;
+                var fileInfo = new FileInfo(sha512Path);
+
+                if (fileInfo.Exists)
+                {
+                    // The file exists, add it to the cache
+                    _fileExistsCache.TryAdd(sha512Path, true);
+                    exists = true;
+
+                    var now = DateTime.UtcNow;
+                    if ((now - fileInfo.LastWriteTimeUtc).TotalDays > 1.0)
+                    {
+                        File.SetLastWriteTimeUtc(sha512Path, now);
+                    }
+                }
             }
 
             return exists;
