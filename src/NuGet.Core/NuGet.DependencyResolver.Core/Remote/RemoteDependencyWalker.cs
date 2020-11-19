@@ -36,7 +36,9 @@ namespace NuGet.DependencyResolver
                 runtimeGraph: runtimeGraph,
                 predicate: _ => (recursive ? DependencyResult.Acceptable : DependencyResult.Eclipsed, null),
                 outerEdge: null,
-                transitiveCentralPackageVersions: transitiveCentralPackageVersions);
+                transitiveCentralPackageVersions: transitiveCentralPackageVersions,
+                new Dictionary<string, LibraryDependency>(StringComparer.OrdinalIgnoreCase),
+                new HashSet<string>());
 
             // do not calculate the hashset of the direct dependencies for cases when there are not any elements in the transitiveCentralPackageVersions queue
             var indexedDirectDependenciesKeyNames = new Lazy<HashSet<string>>(
@@ -71,7 +73,9 @@ namespace NuGet.DependencyResolver
             RuntimeGraph runtimeGraph,
             Func<LibraryRange, (DependencyResult dependencyResult, LibraryDependency conflictingDependency)> predicate,
             GraphEdge<RemoteResolveResult> outerEdge,
-            TransitiveCentralPackageVersions transitiveCentralPackageVersions)
+            TransitiveCentralPackageVersions transitiveCentralPackageVersions,
+            Dictionary<string, LibraryDependency> outerDependencyMap,
+            HashSet<string> parents)
         {
             List<LibraryDependency> dependencies = null;
             HashSet<string> runtimeDependencies = null;
@@ -160,6 +164,7 @@ namespace NuGet.DependencyResolver
             }
 
             Dictionary<string, LibraryDependency> dependencyMap = null;
+            HashSet<string> newParents = null;
 
             // do not add nodes for all the centrally managed package versions to the graph
             // they will be added only if they are transitive
@@ -193,6 +198,14 @@ namespace NuGet.DependencyResolver
                         {
                             dependencyMap = node.Item.Data.Dependencies
                                 .ToDictionary(d => d.Name, d => d, StringComparer.OrdinalIgnoreCase);
+
+                            foreach (var kvp in outerDependencyMap)
+                            {
+                                dependencyMap[kvp.Key] = kvp.Value;
+                            }
+
+                            newParents = new HashSet<string>(parents, StringComparer.OrdinalIgnoreCase);
+                            newParents.Add(node.Item.Data.Match.Library.Name);
                         }
 
                         tasks.Add(CreateGraphNode(
@@ -200,9 +213,11 @@ namespace NuGet.DependencyResolver
                             framework,
                             runtimeName,
                             runtimeGraph,
-                            ChainPredicate(predicate, node.Item.Data.Match.Library.Name, dependencyMap, dependency),
+                            MakePredicate(dependencyMap, dependency, newParents),
                             innerEdge,
-                            transitiveCentralPackageVersions));
+                            transitiveCentralPackageVersions,
+                            dependencyMap,
+                            newParents));
                     }
                     else
                     {
@@ -247,14 +262,14 @@ namespace NuGet.DependencyResolver
             return node;
         }
 
-        private Func<LibraryRange, (DependencyResult dependencyResult, LibraryDependency conflictingDependency)> ChainPredicate(Func<LibraryRange, (DependencyResult dependencyResult, LibraryDependency conflictingDependency)> predicate,
-                string nodeName,
-                Dictionary<string, LibraryDependency> dependencies,
-                LibraryDependency dependency)
+        private Func<LibraryRange, (DependencyResult dependencyResult, LibraryDependency conflictingDependency)> MakePredicate(
+            Dictionary<string, LibraryDependency> dependencies,
+            LibraryDependency dependency,
+            HashSet<string> parents)
         {
             return library =>
             {
-                if (StringComparer.OrdinalIgnoreCase.Equals(nodeName, library.Name))
+                if (parents.Contains(library.Name))
                 {
                     return (DependencyResult.Cycle, null);
                 }
@@ -273,7 +288,7 @@ namespace NuGet.DependencyResolver
                     return (DependencyResult.Eclipsed, d);
                 }
 
-                return predicate(library);
+                return (DependencyResult.Acceptable, null);
             };
         }
 
@@ -430,9 +445,11 @@ namespace NuGet.DependencyResolver
                     framework: framework,
                     runtimeName: runtimeIdentifier,
                     runtimeGraph: runtimeGraph,
-                    predicate: ChainPredicate(_ => (DependencyResult.Acceptable, null), rootNode.Item.Data.Match.Library.Name, dependencies, centralPackageVersionDependency),
+                    predicate: MakePredicate(dependencies, centralPackageVersionDependency, new HashSet<string>()),
                     outerEdge: null,
-                    transitiveCentralPackageVersions: transitiveCentralPackageVersions);
+                    transitiveCentralPackageVersions: transitiveCentralPackageVersions,
+                    dependencies,
+                    new HashSet<string>());
 
             node.OuterNode = rootNode;
             node.Item.IsCentralTransitive = true;
