@@ -25,6 +25,7 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Shared", "Shared", "{DE23D0
 		build\Shared\HashCodeCombiner.cs = build\Shared\HashCodeCombiner.cs
 		build\Shared\TypeExtensions.cs = build\Shared\TypeExtensions.cs
 		build\Shared\TypeInfo.cs = build\Shared\TypeInfo.cs
+		build\Shared\XmlUtility.cs = build\Shared\XmlUtility.cs
 	EndProjectSection
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "test", "test", "{D1549653-9631-4E16-9967-55427174A0DC}"
@@ -56,7 +57,6 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Tests", "Tests", "{96255044
 		test\EndToEnd\tests\OpenPackagePageTest.ps1 = test\EndToEnd\tests\OpenPackagePageTest.ps1
 		test\EndToEnd\tests\PackageRestoreTest.ps1 = test\EndToEnd\tests\PackageRestoreTest.ps1
 		test\EndToEnd\tests\PackTest.ps1 = test\EndToEnd\tests\PackTest.ps1
-		test\EndToEnd\tests\ProjectKTest.ps1 = test\EndToEnd\tests\ProjectKTest.ps1
 		test\EndToEnd\tests\ProjectRetargeting.ps1 = test\EndToEnd\tests\ProjectRetargeting.ps1
 		test\EndToEnd\tests\ServicesTest.ps1 = test\EndToEnd\tests\ServicesTest.ps1
 		test\EndToEnd\tests\Settings.ps1 = test\EndToEnd\tests\Settings.ps1

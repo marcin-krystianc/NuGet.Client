@@ -10,6 +10,7 @@ using System.Threading.Tasks;
 using FluentAssertions;
 using Newtonsoft.Json.Linq;
 using NuGet.Commands.Test;
+using NuGet.Common;
 using NuGet.Configuration;
 using NuGet.Frameworks;
 using NuGet.LibraryModel;
@@ -26,7 +27,7 @@ namespace NuGet.Commands.FuncTest
 {
     using static NuGet.Frameworks.FrameworkConstants;
 
-    using LocalPackageArchiveDownloader = NuGet.Protocol.LocalPackageArchiveDownloader;
+    using LocalPackageArchiveDownloader = Protocol.LocalPackageArchiveDownloader;
 
     public class RestoreCommandTests
     {
@@ -46,7 +47,7 @@ namespace NuGet.Commands.FuncTest
             using (var projectDir = TestDirectory.Create())
             {
                 var specPath = Path.Combine(projectDir, "TestProject", "project.json");
-                var spec = JsonPackageSpecReader.GetPackageSpec(BasicConfigWithNet46.ToString(), "TestProject", specPath);
+                var spec = JsonPackageSpecReader.GetPackageSpec(BasicConfigWithNet46.ToString(), "TestProject", specPath).EnsureProjectJsonRestoreMetadata();
 
                 AddDependency(spec, "ENTITYFRAMEWORK", "6.1.3-BETA1");
                 var logger = new TestLogger();
@@ -145,7 +146,7 @@ namespace NuGet.Commands.FuncTest
             {
                 Directory.CreateDirectory(Path.Combine(projectDir, "TestProject"));
                 var projectSpecPath = Path.Combine(projectDir, "TestProject", "project.json");
-                var projectSpec = JsonPackageSpecReader.GetPackageSpec(BasicConfigWithNet46.ToString(), "TestProject", projectSpecPath);
+                var projectSpec = JsonPackageSpecReader.GetPackageSpec(BasicConfigWithNet46.ToString(), "TestProject", projectSpecPath).EnsureProjectJsonRestoreMetadata();
                 projectSpec.Dependencies = new List<LibraryDependency>
                 {
                     new LibraryDependency()
@@ -277,7 +278,7 @@ namespace NuGet.Commands.FuncTest
             using (var projectDir = TestDirectory.Create())
             {
                 var specPath = Path.Combine(projectDir, "TestProject", "project.json");
-                var spec = JsonPackageSpecReader.GetPackageSpec(BasicConfig.ToString(), "TestProject", specPath);
+                var spec = JsonPackageSpecReader.GetPackageSpec(BasicConfig.ToString(), "TestProject", specPath).EnsureProjectJsonRestoreMetadata();
 
                 // This package has a minclientversion of 9999
                 AddDependency(spec, "TestPackage.MinClientVersion", "1.0.0");
@@ -321,7 +322,7 @@ namespace NuGet.Commands.FuncTest
             using (var projectDir = TestDirectory.Create())
             {
                 var specPath = Path.Combine(projectDir, "TestProject", "project.json");
-                var spec = JsonPackageSpecReader.GetPackageSpec(BasicConfig.ToString(), "TestProject", specPath);
+                var spec = JsonPackageSpecReader.GetPackageSpec(BasicConfig.ToString(), "TestProject", specPath).EnsureProjectJsonRestoreMetadata();
 
                 // This package has a minclientversion of 9999
                 AddDependency(spec, "TestPackage.MinClientVersion", "1.0.0");
@@ -364,7 +365,7 @@ namespace NuGet.Commands.FuncTest
             {
                 sources.Add(new PackageSource(sourceDir));
                 var specPath = Path.Combine(projectDir, "TestProject", "project.json");
-                var spec = JsonPackageSpecReader.GetPackageSpec(BasicConfig.ToString(), "TestProject", specPath);
+                var spec = JsonPackageSpecReader.GetPackageSpec(BasicConfig.ToString(), "TestProject", specPath).EnsureProjectJsonRestoreMetadata();
 
                 // This package has a minclientversion of 9.9999.0
                 AddDependency(spec, "packageA", "1.0.0");
@@ -417,7 +418,7 @@ namespace NuGet.Commands.FuncTest
             {
                 sources.Add(new PackageSource(emptyDir));
                 var specPath = Path.Combine(projectDir, "TestProject", "project.json");
-                var spec = JsonPackageSpecReader.GetPackageSpec(BasicConfig.ToString(), "TestProject", specPath);
+                var spec = JsonPackageSpecReader.GetPackageSpec(BasicConfig.ToString(), "TestProject", specPath).EnsureProjectJsonRestoreMetadata();
 
                 // This package has a minclientversion of 9.9999.0
                 AddDependency(spec, "packageA", "1.0.0");
@@ -506,7 +507,7 @@ namespace NuGet.Commands.FuncTest
                 }");
 
                 var specPath = Path.Combine(projectDir, "TestProject", "project.json");
-                var spec = JsonPackageSpecReader.GetPackageSpec(configJson.ToString(), "TestProject", specPath);
+                var spec = JsonPackageSpecReader.GetPackageSpec(configJson.ToString(), "TestProject", specPath).EnsureProjectJsonRestoreMetadata();
 
                 var logger = new TestLogger();
                 var request = new TestRestoreRequest(spec, sources, packagesDir, logger)
@@ -562,7 +563,7 @@ namespace NuGet.Commands.FuncTest
                 }");
 
                 var specPath = Path.Combine(projectDir, "TestProject", "project.json");
-                var spec = JsonPackageSpecReader.GetPackageSpec(configJson.ToString(), "TestProject", specPath);
+                var spec = JsonPackageSpecReader.GetPackageSpec(configJson.ToString(), "TestProject", specPath).EnsureProjectJsonRestoreMetadata();
 
                 var logger = new TestLogger();
                 var request = new TestRestoreRequest(spec, sources, packagesDir, logger)
@@ -620,7 +621,7 @@ namespace NuGet.Commands.FuncTest
                 }");
 
                 var specPath = Path.Combine(projectDir, "TestProject", "project.json");
-                var spec = JsonPackageSpecReader.GetPackageSpec(configJson.ToString(), "TestProject", specPath);
+                var spec = JsonPackageSpecReader.GetPackageSpec(configJson.ToString(), "TestProject", specPath).EnsureProjectJsonRestoreMetadata();
 
                 var logger = new TestLogger();
                 var request = new TestRestoreRequest(spec, sources, packagesDir, logger)
@@ -678,7 +679,7 @@ namespace NuGet.Commands.FuncTest
                 }");
 
                 var specPath = Path.Combine(projectDir, "TestProject", "project.json");
-                var spec = JsonPackageSpecReader.GetPackageSpec(configJson.ToString(), "TestProject", specPath);
+                var spec = JsonPackageSpecReader.GetPackageSpec(configJson.ToString(), "TestProject", specPath).EnsureProjectJsonRestoreMetadata();
                 var logger = new TestLogger();
 
                 // Create left over nupkg to simulate a corrupted install
@@ -739,7 +740,7 @@ namespace NuGet.Commands.FuncTest
                 }");
 
                 var specPath = Path.Combine(projectDir, "TestProject", "project.json");
-                var spec = JsonPackageSpecReader.GetPackageSpec(configJson.ToString(), "TestProject", specPath);
+                var spec = JsonPackageSpecReader.GetPackageSpec(configJson.ToString(), "TestProject", specPath).EnsureProjectJsonRestoreMetadata();
 
                 var logger = new TestLogger();
                 var request = new TestRestoreRequest(spec, sources, packagesDir, logger)
@@ -791,7 +792,7 @@ namespace NuGet.Commands.FuncTest
                 }");
 
                 var specPath = Path.Combine(projectDir, "TestProject", "project.json");
-                var spec = JsonPackageSpecReader.GetPackageSpec(configJson.ToString(), "TestProject", specPath);
+                var spec = JsonPackageSpecReader.GetPackageSpec(configJson.ToString(), "TestProject", specPath).EnsureProjectJsonRestoreMetadata();
 
                 var logger = new TestLogger();
                 var request = new TestRestoreRequest(spec, sources, packagesDir, logger)
@@ -845,7 +846,7 @@ namespace NuGet.Commands.FuncTest
                 }");
 
                 var specPath = Path.Combine(projectDir, "TestProject", "project.json");
-                var spec = JsonPackageSpecReader.GetPackageSpec(configJson.ToString(), "TestProject", specPath);
+                var spec = JsonPackageSpecReader.GetPackageSpec(configJson.ToString(), "TestProject", specPath).EnsureProjectJsonRestoreMetadata();
 
                 var logger = new TestLogger();
                 var request = new TestRestoreRequest(spec, sources, packagesDir, logger)
@@ -890,7 +891,7 @@ namespace NuGet.Commands.FuncTest
                 json["frameworks"] = frameworks;
 
                 var specPath = Path.Combine(projectDir, "TestProject", "project.json");
-                var spec = JsonPackageSpecReader.GetPackageSpec(json.ToString(), "TestProject", specPath);
+                var spec = JsonPackageSpecReader.GetPackageSpec(json.ToString(), "TestProject", specPath).EnsureProjectJsonRestoreMetadata();
 
                 AddDependency(spec, "nEwTonSoft.JSon", "6.0.8");
                 AddDependency(spec, "json-ld.net", "1.0.4");
@@ -945,7 +946,7 @@ namespace NuGet.Commands.FuncTest
                 json["frameworks"] = frameworks;
 
                 var specPath = Path.Combine(projectDir, "TestProject", "project.json");
-                var spec = JsonPackageSpecReader.GetPackageSpec(json.ToString(), "TestProject", specPath);
+                var spec = JsonPackageSpecReader.GetPackageSpec(json.ToString(), "TestProject", specPath).EnsureProjectJsonRestoreMetadata();
 
                 AddDependency(spec, "nEwTonSoft.JSon", "4.0.1");
                 AddDependency(spec, "dotNetRDF", "1.0.8.3533");
@@ -982,7 +983,7 @@ namespace NuGet.Commands.FuncTest
             using (var projectDir = TestDirectory.Create())
             {
                 var specPath = Path.Combine(projectDir, "TestProject", "project.json");
-                var spec = JsonPackageSpecReader.GetPackageSpec(BasicConfig.ToString(), "TestProject", specPath);
+                var spec = JsonPackageSpecReader.GetPackageSpec(BasicConfig.ToString(), "TestProject", specPath).EnsureProjectJsonRestoreMetadata();
 
                 AddDependency(spec, "NuGet.Versioning", "1.0.7");
 
@@ -1041,7 +1042,7 @@ namespace NuGet.Commands.FuncTest
             using (var projectDir = TestDirectory.Create())
             {
                 var specPath = Path.Combine(projectDir, "TestProject", "project.json");
-                var spec = JsonPackageSpecReader.GetPackageSpec(BasicConfig.ToString(), "TestProject", specPath);
+                var spec = JsonPackageSpecReader.GetPackageSpec(BasicConfig.ToString(), "TestProject", specPath).EnsureProjectJsonRestoreMetadata();
 
                 AddDependency(spec, "NuGet.Versioning", "1.0.7");
 
@@ -1108,7 +1109,7 @@ namespace NuGet.Commands.FuncTest
             using (var projectDir = TestDirectory.Create())
             {
                 var specPath = Path.Combine(projectDir, "TestProject", "project.json");
-                var spec = JsonPackageSpecReader.GetPackageSpec(BasicConfig.ToString(), "TestProject", specPath);
+                var spec = JsonPackageSpecReader.GetPackageSpec(BasicConfig.ToString(), "TestProject", specPath).EnsureProjectJsonRestoreMetadata();
 
                 AddDependency(spec, "NuGet.Versioning", "1.0.7");
 
@@ -1152,7 +1153,7 @@ namespace NuGet.Commands.FuncTest
             using (var projectDir = TestDirectory.Create())
             {
                 var specPath = Path.Combine(projectDir, "TestProject", "project.json");
-                var spec = JsonPackageSpecReader.GetPackageSpec(BasicConfig.ToString(), "TestProject", specPath);
+                var spec = JsonPackageSpecReader.GetPackageSpec(BasicConfig.ToString(), "TestProject", specPath).EnsureProjectJsonRestoreMetadata();
 
                 AddDependency(spec, "WebGrease", "1.6.0");
 
@@ -1218,7 +1219,7 @@ namespace NuGet.Commands.FuncTest
                 File.WriteAllText(Path.Combine(project1.FullName, "project.json"), project1Json);
 
                 var specPath1 = Path.Combine(project1.FullName, "project.json");
-                var spec1 = JsonPackageSpecReader.GetPackageSpec(project1Json, "project1", specPath1);
+                var spec1 = JsonPackageSpecReader.GetPackageSpec(project1Json, "project1", specPath1).EnsureProjectJsonRestoreMetadata();
                 var logger = new TestLogger();
                 var request = new TestRestoreRequest(spec1, sources, packagesDir.FullName, logger)
                 {
@@ -1274,7 +1275,7 @@ namespace NuGet.Commands.FuncTest
             using (var projectDir = TestDirectory.Create())
             {
                 var specPath = Path.Combine(projectDir, "TestProject", "project.json");
-                var spec = JsonPackageSpecReader.GetPackageSpec(BasicConfigWithNet46.ToString(), "TestProject", specPath);
+                var spec = JsonPackageSpecReader.GetPackageSpec(BasicConfigWithNet46.ToString(), "TestProject", specPath).EnsureProjectJsonRestoreMetadata();
 
                 AddDependency(spec, "Moon.Owin.Localization", "1.3.1");
 
@@ -1317,7 +1318,7 @@ namespace NuGet.Commands.FuncTest
             using (var projectDir = TestDirectory.Create())
             {
                 var specPath = Path.Combine(projectDir, "TestProject", "project.json");
-                var spec = JsonPackageSpecReader.GetPackageSpec(BasicConfig.ToString(), "TestProject", specPath);
+                var spec = JsonPackageSpecReader.GetPackageSpec(BasicConfig.ToString(), "TestProject", specPath).EnsureProjectJsonRestoreMetadata();
 
                 AddDependency(spec, "NuGet.Versioning", "1.0.7");
 
@@ -1359,7 +1360,7 @@ namespace NuGet.Commands.FuncTest
             using (var projectDir = TestDirectory.Create())
             {
                 var specPath = Path.Combine(projectDir, "TestProject", "project.json");
-                var spec = JsonPackageSpecReader.GetPackageSpec(BasicConfig.ToString(), "TestProject", specPath);
+                var spec = JsonPackageSpecReader.GetPackageSpec(BasicConfig.ToString(), "TestProject", specPath).EnsureProjectJsonRestoreMetadata();
 
                 AddDependency(spec, "NuGet.Versioning", "1.0.7");
 
@@ -1395,7 +1396,7 @@ namespace NuGet.Commands.FuncTest
             using (var projectDir = TestDirectory.Create())
             {
                 var specPath = Path.Combine(projectDir, "TestProject", "project.json");
-                var spec = JsonPackageSpecReader.GetPackageSpec(BasicConfig.ToString(), "TestProject", specPath);
+                var spec = JsonPackageSpecReader.GetPackageSpec(BasicConfig.ToString(), "TestProject", specPath).EnsureProjectJsonRestoreMetadata();
 
                 AddDependency(spec, "owin", "1.0");
 
@@ -1429,7 +1430,7 @@ namespace NuGet.Commands.FuncTest
             using (var projectDir = TestDirectory.Create())
             {
                 var specPath = Path.Combine(projectDir, "TestProject", "project.json");
-                var spec = JsonPackageSpecReader.GetPackageSpec(BasicConfig.ToString(), "TestProject", specPath);
+                var spec = JsonPackageSpecReader.GetPackageSpec(BasicConfig.ToString(), "TestProject", specPath).EnsureProjectJsonRestoreMetadata();
 
                 AddDependency(spec, "Newtonsoft.Json", "7.0.0"); // 7.0.0 does not exist so we'll bump up to 7.0.1
 
@@ -1467,7 +1468,7 @@ namespace NuGet.Commands.FuncTest
             using (var projectDir = TestDirectory.Create())
             {
                 var specPath = Path.Combine(projectDir, "TestProject", "project.json");
-                var spec = JsonPackageSpecReader.GetPackageSpec(BasicConfig.ToString(), "TestProject", specPath);
+                var spec = JsonPackageSpecReader.GetPackageSpec(BasicConfig.ToString(), "TestProject", specPath).EnsureProjectJsonRestoreMetadata();
 
                 AddDependency(spec, "Newtonsoft.Json", "7.0.0"); // 7.0.0 does not exist so we'll bump up to 7.0.1
 
@@ -1509,7 +1510,7 @@ namespace NuGet.Commands.FuncTest
             using (var projectDir = TestDirectory.Create())
             {
                 var specPath = Path.Combine(projectDir, "TestProject", "project.json");
-                var spec = JsonPackageSpecReader.GetPackageSpec(BasicConfig.ToString(), "TestProject", specPath);
+                var spec = JsonPackageSpecReader.GetPackageSpec(BasicConfig.ToString(), "TestProject", specPath).EnsureProjectJsonRestoreMetadata();
 
                 AddDependency(spec, "Newtonsoft.Json", "7.0.1");
 
@@ -1552,7 +1553,7 @@ namespace NuGet.Commands.FuncTest
             using (var projectDir = TestDirectory.Create())
             {
                 var specPath = Path.Combine(projectDir, "TestProject", "project.json");
-                var spec = JsonPackageSpecReader.GetPackageSpec(BasicConfig.ToString(), "TestProject", specPath);
+                var spec = JsonPackageSpecReader.GetPackageSpec(BasicConfig.ToString(), "TestProject", specPath).EnsureProjectJsonRestoreMetadata();
 
                 AddDependency(spec, "NuGet.Core", "2.8.3");
 
@@ -1603,7 +1604,7 @@ namespace NuGet.Commands.FuncTest
             using (var sourceCacheContext = new SourceCacheContext())
             {
                 var specPath = Path.Combine(projectDir, "TestProject", "project.json");
-                var spec = JsonPackageSpecReader.GetPackageSpec(BasicConfig.ToString(), "TestProject", specPath);
+                var spec = JsonPackageSpecReader.GetPackageSpec(BasicConfig.ToString(), "TestProject", specPath).EnsureProjectJsonRestoreMetadata();
 
                 AddDependency(spec, "NotARealPackage.ThisShouldNotExists.DontCreateIt.Seriously.JustDontDoIt.Please", "2.8.3");
 
@@ -1654,7 +1655,7 @@ namespace NuGet.Commands.FuncTest
             using (var projectDir = TestDirectory.Create())
             {
                 var specPath = Path.Combine(projectDir, "TestProject", "project.json");
-                var spec = JsonPackageSpecReader.GetPackageSpec(project, "TestProject", specPath);
+                var spec = JsonPackageSpecReader.GetPackageSpec(project, "TestProject", specPath).EnsureProjectJsonRestoreMetadata();
 
                 var logger = new TestLogger();
                 var request = new TestRestoreRequest(spec, sources, packagesDir, logger)
@@ -1701,7 +1702,7 @@ namespace NuGet.Commands.FuncTest
             using (var projectDir = TestDirectory.Create())
             {
                 var specPath = Path.Combine(projectDir, "TestProject", "project.json");
-                var spec = JsonPackageSpecReader.GetPackageSpec(project, "TestProject", specPath);
+                var spec = JsonPackageSpecReader.GetPackageSpec(project, "TestProject", specPath).EnsureProjectJsonRestoreMetadata();
 
                 var logger = new TestLogger();
                 var request = new TestRestoreRequest(spec, sources, packagesDir, logger)
@@ -1881,7 +1882,7 @@ namespace NuGet.Commands.FuncTest
                 }");
 
                 var specPath = Path.Combine(projectDir, "TestProject", "project.json");
-                var spec = JsonPackageSpecReader.GetPackageSpec(configJson.ToString(), "TestProject", specPath);
+                var spec = JsonPackageSpecReader.GetPackageSpec(configJson.ToString(), "TestProject", specPath).EnsureProjectJsonRestoreMetadata();
 
                 var logger = new TestLogger();
                 string longPath = packagesDir + new string('_', 300);
@@ -1932,7 +1933,7 @@ namespace NuGet.Commands.FuncTest
                 }");
 
                 var specPath = Path.Combine(projectDir, "TestProject", "project.json");
-                var spec = JsonPackageSpecReader.GetPackageSpec(configJson.ToString(), "TestProject", specPath);
+                var spec = JsonPackageSpecReader.GetPackageSpec(configJson.ToString(), "TestProject", specPath).EnsureProjectJsonRestoreMetadata();
 
                 var logger = new TestLogger();
                 var request = new TestRestoreRequest(spec, sources, packagesDir, cacheContext, logger)
@@ -1975,7 +1976,7 @@ namespace NuGet.Commands.FuncTest
                 }");
 
                 var specPath = Path.Combine(projectDir, "TestProject", "project.json");
-                var spec = JsonPackageSpecReader.GetPackageSpec(configJson.ToString(), "TestProject", specPath);
+                var spec = JsonPackageSpecReader.GetPackageSpec(configJson.ToString(), "TestProject", specPath).EnsureProjectJsonRestoreMetadata();
 
                 var logger = new TestLogger();
                 var request = new TestRestoreRequest(spec, sources, packagesDir, cacheContext, logger)
@@ -2015,7 +2016,7 @@ namespace NuGet.Commands.FuncTest
                 }");
 
                 var specPath = Path.Combine(projectDir, "TestProject", "project.json");
-                var spec = JsonPackageSpecReader.GetPackageSpec(configJson.ToString(), "TestProject", specPath);
+                var spec = JsonPackageSpecReader.GetPackageSpec(configJson.ToString(), "TestProject", specPath).EnsureProjectJsonRestoreMetadata();
 
                 var logger = new TestLogger();
                 var request = new TestRestoreRequest(spec, sources, packagesDir, logger)
@@ -2986,6 +2987,71 @@ namespace NuGet.Commands.FuncTest
                 await result.CommitAsync(logger, CancellationToken.None);
                 result.Success.Should().BeTrue(because: logger.ShowMessages());
                 result.Should().BeAssignableTo<NoOpRestoreResult>(because: "This should be a no-op restore.");
+            }
+        }
+
+        [Fact]
+        public async Task RestoreCommand_WhenPlatformVersionIsEmpty_ThrowsError()
+        {
+            using (var pathContext = new SimpleTestPathContext())
+            using (var context = new SourceCacheContext())
+            {
+                var configJson = JObject.Parse(@"
+                {
+                    ""frameworks"": {
+                        ""net5.0-windows"": {
+                            ""dependencies"": {
+                                ""A"": {
+                                    ""version"" : ""1.0.0"",
+                                }
+                            }
+                        }
+                    }
+                }");
+
+                // Arrange
+                var packageA = new SimpleTestPackageContext("a", "1.0.0");
+                packageA.Files.Clear();
+                packageA.AddFile("lib/net5.0-windows/a.dll");
+
+                await SimpleTestPackageUtility.CreateFolderFeedV3Async(
+                    pathContext.PackageSource,
+                    PackageSaveMode.Defaultv3,
+                    packageA);
+
+                var sources = new List<PackageSource>
+                {
+                    new PackageSource(pathContext.PackageSource)
+                };
+                var logger = new TestLogger();
+
+                var projectDirectory = Path.Combine(pathContext.SolutionRoot, "TestProject");
+                var cachingSourceProvider = new CachingSourceProvider(new PackageSourceProvider(NullSettings.Instance));
+
+                var spec = JsonPackageSpecReader.GetPackageSpec(configJson.ToString(), "TestProject", Path.Combine(projectDirectory, "project.csproj")).WithTestRestoreMetadata();
+                var dgSpec = new DependencyGraphSpec();
+                dgSpec.AddProject(spec);
+                dgSpec.AddRestore(spec.Name);
+
+                var request = new TestRestoreRequest(spec, sources, pathContext.UserPackagesFolder, logger)
+                {
+                    ProjectStyle = ProjectStyle.PackageReference,
+                    DependencyGraphSpec = dgSpec,
+                    AllowNoOp = true,
+                };
+                var command = new RestoreCommand(request);
+
+                // Act
+                var result = await command.ExecuteAsync();
+                await result.CommitAsync(logger, CancellationToken.None);
+
+                // Assert
+                Assert.False(result.Success);
+                Assert.Equal(1, logger.ErrorMessages.Count);
+                logger.ErrorMessages.TryDequeue(out var errorMessage);
+                Assert.True(errorMessage.Contains("Platform version"));
+                var messagesForNU1012 = result.LockFile.LogMessages.Where(m => m.Code == NuGetLogCode.NU1012);
+                Assert.Equal(1, messagesForNU1012.Count());
             }
         }
 

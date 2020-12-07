@@ -67,6 +67,7 @@ namespace NuGet.PackageManagement.UI
         private bool _loadedAndInitialized = false;
         private bool _recommendPackages = false;
         private (string modelVersion, string vsixVersion)? _recommenderVersion;
+        private string _settingsKey;
 
         private PackageManagerControl()
         {
@@ -96,6 +97,7 @@ namespace NuGet.PackageManagement.UI
             if (Model.IsSolution)
             {
                 _detailModel = await PackageSolutionDetailControlModel.CreateAsync(
+                    Model.Context.ServiceBroker,
                     Model.Context.SolutionManagerService,
                     Model.Context.Projects,
                     Model.Context.PackageManagerProviders,
@@ -103,7 +105,10 @@ namespace NuGet.PackageManagement.UI
             }
             else
             {
-                _detailModel = new PackageDetailControlModel(Model.Context.SolutionManagerService, Model.Context.Projects);
+                _detailModel = new PackageDetailControlModel(
+                    Model.Context.ServiceBroker,
+                    Model.Context.SolutionManagerService,
+                    Model.Context.Projects);
             }
 
             if (_windowSearchHostFactory != null)
@@ -128,7 +133,8 @@ namespace NuGet.PackageManagement.UI
                 _topPanel.CreateAndAddConsolidateTab();
             }
 
-            var settings = await LoadSettingsAsync(CancellationToken.None);
+            _settingsKey = await GetSettingsKeyAsync(CancellationToken.None);
+            UserSettings settings = LoadSettings();
             InitializeFilterList(settings);
             InitSourceRepoList(settings);
             ApplySettings(settings, Settings);
@@ -220,11 +226,17 @@ namespace NuGet.PackageManagement.UI
 
             IProjectContextInfo currentNugetProject = Model.Context.Projects.First();
 
-            IProjectMetadataContextInfo currentProjectMetadata = await currentNugetProject.GetMetadataAsync(CancellationToken.None);
-            IProjectMetadataContextInfo renamedProjectMetadata = await project.GetMetadataAsync(CancellationToken.None);
+            IProjectMetadataContextInfo currentProjectMetadata = await currentNugetProject.GetMetadataAsync(
+                Model.Context.ServiceBroker,
+                CancellationToken.None);
+            IProjectMetadataContextInfo renamedProjectMetadata = await project.GetMetadataAsync(
+                Model.Context.ServiceBroker,
+                CancellationToken.None);
 
             if (currentProjectMetadata.FullPath == renamedProjectMetadata.FullPath)
             {
+                _settingsKey = GetProjectSettingsKey(renamedProjectMetadata.Name);
+
                 await SetTitleAsync(currentProjectMetadata);
             }
         }
@@ -317,7 +329,9 @@ namespace NuGet.PackageManagement.UI
         {
             // This is a project package manager, so there is one and only one project.
             IProjectContextInfo project = Model.Context.Projects.First();
-            IProjectMetadataContextInfo projectMetadata = await project.GetMetadataAsync(CancellationToken.None);
+            IProjectMetadataContextInfo projectMetadata = await project.GetMetadataAsync(
+                Model.Context.ServiceBroker,
+                CancellationToken.None);
 
             // This ensures that we refresh the UI only if the event.project.FullName matches the NuGetProject.FullName.
             // We also refresh the UI if projectFullPath is not present.
@@ -485,11 +499,10 @@ namespace NuGet.PackageManagement.UI
             var timeSpan = GetTimeSinceLastRefreshAndRestart();
             ResetTabDataLoadFlags();
 
-            NuGetUIThreadHelper.JoinableTaskFactory.RunAsync(() => Sources_PackageSourcesChangedAsync(timeSpan))
-                .PostOnFailure(nameof(PackageManagerControl), nameof(Sources_PackageSourcesChanged));
+            Sources_PackageSourcesChanged(timeSpan);
         }
 
-        private async Task Sources_PackageSourcesChangedAsync(TimeSpan timeSpan)
+        private void Sources_PackageSourcesChanged(TimeSpan timeSpan)
         {
             try
             {
@@ -503,7 +516,7 @@ namespace NuGet.PackageManagement.UI
                 }
                 else
                 {
-                    await SaveSettingsAsync(CancellationToken.None);
+                    SaveSettings();
                     SearchPackagesAndRefreshUpdateCount(useCacheForUpdates: false);
                     EmitRefreshEvent(timeSpan, RefreshOperationSource.PackageSourcesChanged, RefreshOperationStatus.Success);
                 }
@@ -518,36 +531,46 @@ namespace NuGet.PackageManagement.UI
         {
             string key;
 
-            if (!Model.IsSolution)
+            if (Model.IsSolution)
             {
-                IProjectContextInfo project = Model.Context.Projects.First();
-                IProjectMetadataContextInfo projectMetadata = await project.GetMetadataAsync(cancellationToken);
-                string projectName;
-
-                if (string.IsNullOrEmpty(projectMetadata.Name))
-                {
-                    projectName = "unknown";
-                }
-                else
-                {
-                    projectName = projectMetadata.Name;
-                }
-
-                key = "project:" + projectName;
+                key = "solution";
             }
             else
             {
-                key = "solution";
+                IProjectContextInfo project = Model.Context.Projects.First();
+                IProjectMetadataContextInfo projectMetadata = await project.GetMetadataAsync(
+                    Model.Context.ServiceBroker,
+                    cancellationToken);
+
+                return GetProjectSettingsKey(projectMetadata.Name);
             }
 
             return key;
         }
 
+        private static string GetProjectSettingsKey(string projectName)
+        {
+            string value;
+
+            if (string.IsNullOrEmpty(projectName))
+            {
+                value = "unknown";
+            }
+            else
+            {
+                value = projectName;
+            }
+
+            return "project:" + value;
+        }
+
         // Save the settings of this doc window in the UIContext. Note that the settings
         // are not guaranteed to be persisted. We need to call Model.Context.SaveSettings()
         // to persist the settings.
-        public async Task SaveSettingsAsync(CancellationToken cancellationToken)
+        public void SaveSettings()
         {
+            Assumes.NotNullOrEmpty(_settingsKey);
+
             var settings = new UserSettings
             {
                 SourceRepository = SelectedSource?.SourceName,
@@ -563,14 +586,14 @@ namespace NuGet.PackageManagement.UI
             };
             _packageDetail._solutionView.SaveSettings(settings);
 
-            string settingsKey = await GetSettingsKeyAsync(cancellationToken);
-            Model.Context.UserSettingsManager.AddSettings(settingsKey, settings);
+            Model.Context.UserSettingsManager.AddSettings(_settingsKey, settings);
         }
 
-        private async Task<UserSettings> LoadSettingsAsync(CancellationToken cancellationToken)
+        private UserSettings LoadSettings()
         {
-            string settingsKey = await GetSettingsKeyAsync(cancellationToken);
-            var settings = Model.Context.UserSettingsManager.GetSettings(settingsKey);
+            Assumes.NotNullOrEmpty(_settingsKey);
+
+            UserSettings settings = Model.Context.UserSettingsManager.GetSettings(_settingsKey);
 
             if (PreviewWindow.IsDoNotShowPreviewWindowEnabled())
             {
@@ -690,7 +713,9 @@ namespace NuGet.PackageManagement.UI
                 if (projectMetadata is null)
                 {
                     IProjectContextInfo project = Model.Context.Projects.First();
-                    IProjectMetadataContextInfo metadata = await project.GetMetadataAsync(CancellationToken.None);
+                    IProjectMetadataContextInfo metadata = await project.GetMetadataAsync(
+                        Model.Context.ServiceBroker,
+                        CancellationToken.None);
 
                     projectName = metadata.Name;
                 }
@@ -1139,6 +1164,7 @@ namespace NuGet.PackageManagement.UI
             if (filter == ItemFilter.UpdatesAvailable)
             {
                 packageFeeds.mainFeed = new UpdatePackageFeed(
+                    context.ServiceBroker,
                     installedPackages,
                     metadataProvider,
                     context.Projects,
@@ -1177,16 +1203,10 @@ namespace NuGet.PackageManagement.UI
                 _topPanel.SourceToolTip.Visibility = Visibility.Visible;
                 _topPanel.SourceToolTip.DataContext = SelectedSource.GetTooltip();
 
-                NuGetUIThreadHelper.JoinableTaskFactory.RunAsync(() => SourceRepoList_SelectionChangedAsync(timeSpan))
-                    .PostOnFailure(nameof(PackageManagerControl), nameof(SourceRepoList_SelectionChanged));
+                SaveSettings();
+                SearchPackagesAndRefreshUpdateCount(useCacheForUpdates: false);
+                EmitRefreshEvent(timeSpan, RefreshOperationSource.SourceSelectionChanged, RefreshOperationStatus.Success);
             }
-        }
-
-        private async Task SourceRepoList_SelectionChangedAsync(TimeSpan timeSpan)
-        {
-            await SaveSettingsAsync(CancellationToken.None);
-            SearchPackagesAndRefreshUpdateCount(useCacheForUpdates: false);
-            EmitRefreshEvent(timeSpan, RefreshOperationSource.SourceSelectionChanged, RefreshOperationStatus.Success);
         }
 
         private void Filter_SelectionChanged(object sender, FilterChangedEventArgs e)
@@ -1253,7 +1273,12 @@ namespace NuGet.PackageManagement.UI
                 NuGetUIThreadHelper.JoinableTaskFactory.RunAsync(async () =>
                 {
                     await NuGetUIThreadHelper.JoinableTaskFactory.SwitchToMainThreadAsync();
-                    var installedPackages = await PackageCollection.FromProjectsAsync(Model.Context.Projects, CancellationToken.None);
+
+                    PackageCollection installedPackages = await PackageCollection.FromProjectsAsync(
+                        Model.Context.ServiceBroker,
+                        Model.Context.Projects,
+                        CancellationToken.None);
+
                     _packageList.UpdatePackageStatus(installedPackages.ToArray());
                 })
                 .PostOnFailure(nameof(PackageManagerControl), nameof(Refresh));

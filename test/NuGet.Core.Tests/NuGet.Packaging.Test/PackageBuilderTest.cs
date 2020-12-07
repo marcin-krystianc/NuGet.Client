@@ -139,7 +139,6 @@ namespace NuGet.Packaging.Test
         [InlineData(".NETFramework,Version=v4.7.2", ".NETFramework4.7.2")]
         [InlineData(".NETFramework,Version=v4.7.2,Profile=foo", ".NETFramework4.7.2-foo")]
         [InlineData("net5.0", "net5.0")]
-        [InlineData("net5.0-windows", "net5.0-windows")]
         [InlineData("net5.0-macos10.8", "net5.0-macos10.8")]
         [InlineData("net6.0", "net6.0")]
         public void CreatePackageTFMFormatting(string from, string to)
@@ -214,8 +213,8 @@ namespace NuGet.Packaging.Test
             var net45 = new PackageDependencyGroup(new NuGetFramework(".NETFramework", new Version(4, 5)), dependencies45);
             builder.DependencyGroups.Add(net45);
 
-            var net50win = new PackageDependencyGroup(new NuGetFramework(".NETCoreApp", new Version(5, 0), "windows", new Version(0, 0)), dependencies50);
-            builder.DependencyGroups.Add(net50win);
+            var net50win7 = new PackageDependencyGroup(new NuGetFramework(".NETCoreApp", new Version(5, 0), "windows", new Version(7, 0)), dependencies50);
+            builder.DependencyGroups.Add(net50win7);
 
             using (var ms = new MemoryStream())
             {
@@ -240,7 +239,7 @@ namespace NuGet.Packaging.Test
       <group targetFramework="".NETFramework4.5"">
         <dependency id=""packageB"" version=""1.0.0"" exclude=""z"" />
       </group>
-      <group targetFramework=""net5.0-windows"">
+      <group targetFramework=""net5.0-windows7.0"">
         <dependency id=""packageC"" version=""1.0.0"" include=""a,b,c"" exclude=""b,c"" />
       </group>
     </dependencies>
@@ -1316,6 +1315,115 @@ namespace NuGet.Packaging.Test
 
             ExceptionAssert.Throws<PackagingException>(() => builder.Save(new MemoryStream()),
                 "Invalid assembly reference 'Bar.dll'. Ensure that a file named 'Bar.dll' exists in the lib directory.");
+        }
+
+        [Fact]
+        public void SavingPackageValidatesMissingTPVInReferences()
+        {
+            // Arrange
+            var builder = new PackageBuilder
+            {
+                Id = "A",
+                Version = NuGetVersion.Parse("1.0"),
+                Description = "Test",
+            };
+            builder.Authors.Add("Test");
+            builder.Files.Add(new PhysicalPackageFile { TargetPath = @"lib\net5.0-windows\Foo.dll" });
+            builder.PackageAssemblyReferences = new[] { new PackageReferenceSet(NuGetFramework.Parse("net5.0-windows"), new string[] { "Foo.dll" }) };
+
+            ExceptionAssert.Throws<PackagingException>(() => builder.Save(new MemoryStream()),
+                "Some reference group TFMs are missing a platform version: net5.0-windows");
+        }
+
+        [Fact]
+        public void SavingPackageValidatesMissingTPVInFiles()
+        {
+            // Arrange
+            var builder = new PackageBuilder
+            {
+                Id = "A",
+                Version = NuGetVersion.Parse("1.0"),
+                Description = "Test",
+            };
+            builder.Authors.Add("Test");
+            builder.Files.Add(new PhysicalPackageFile { TargetPath = @"lib\net5.0-windows\Foo.dll" });
+            builder.Files.Add(new PhysicalPackageFile { TargetPath = @"ref\net6.0-windows\Foo.dll" });
+            builder.Files.Add(new PhysicalPackageFile { TargetPath = @"runtimes\win7-x64\lib\net7.0-windows\Foo.dll" });
+            builder.Files.Add(new PhysicalPackageFile { TargetPath = @"runtimes\win7-x64\nativeassets\net8.0-windows\Foo.dll" });
+            builder.Files.Add(new PhysicalPackageFile { TargetPath = @"build\net9.0-windows\foo.props" });
+            builder.Files.Add(new PhysicalPackageFile { TargetPath = @"contentFiles\csharp\net10.0-windows\Foo.txt" });
+            builder.Files.Add(new PhysicalPackageFile { TargetPath = @"tools\net11.0-windows\win7-x64\Foo.exe" });
+            builder.Files.Add(new PhysicalPackageFile { TargetPath = @"embed\net12.0-windows\Foo.dll" });
+            builder.Files.Add(new PhysicalPackageFile { TargetPath = @"buildTransitive\net13.0-windows\foo.props" });
+
+            ExceptionAssert.Throws<PackagingException>(() => builder.Save(new MemoryStream()),
+                "Some included files are included under TFMs which are missing a platform version: " + string.Join(", ", new string[]
+                {
+                  "net5.0-windows",
+                  "net6.0-windows",
+                  "net7.0-windows",
+                  "net8.0-windows",
+                  "net9.0-windows",
+                  "net10.0-windows",
+                  "net11.0-windows",
+                  "net12.0-windows",
+                  "net13.0-windows"
+                }.OrderBy(str => str)));
+        }
+
+        [Fact]
+        public void SavingPackageValidatesMissingTPVInFrameworkReferences()
+        {
+            // Arrange
+            var builder = new PackageBuilder
+            {
+                Id = "A",
+                Version = NuGetVersion.Parse("1.0"),
+                Description = "Test",
+            };
+            builder.Authors.Add("Test");
+            builder.FrameworkReferences.Add(new FrameworkAssemblyReference("System.Web", new[] { NuGetFramework.Parse("net5.0-windows") }));
+
+            ExceptionAssert.Throws<PackagingException>(() => builder.Save(new MemoryStream()),
+                "Some framework assembly reference TFMs are missing a platform version: net5.0-windows");
+        }
+
+        [Fact]
+        public void SavingPackageValidatesMissingTPVInFrameworkReferenceGroups()
+        {
+            // Arrange
+            var builder = new PackageBuilder
+            {
+                Id = "A",
+                Version = NuGetVersion.Parse("1.0"),
+                Description = "Test",
+            };
+            builder.Authors.Add("Test");
+            builder.FrameworkReferenceGroups.Add(new FrameworkReferenceGroup(NuGetFramework.Parse("net5.0-windows"), new List<FrameworkReference>()));
+
+            ExceptionAssert.Throws<PackagingException>(() => builder.Save(new MemoryStream()),
+                "Some reference assembly group TFMs are missing a platform version: net5.0-windows");
+        }
+
+        [Fact]
+        public void SavingPackageValidatesMissingTPVInDependencyGroups()
+        {
+            // Arrange
+            var builder = new PackageBuilder
+            {
+                Id = "A",
+                Version = NuGetVersion.Parse("1.0"),
+                Description = "Test",
+            };
+            builder.Authors.Add("Test");
+            var dependencySet = new PackageDependencyGroup(NuGetFramework.Parse("net5.0-windows"), new[] {
+                        new PackageDependency("B", new VersionRange(NuGetVersion.Parse("2.0"), true, NuGetVersion.Parse("2.0")))
+                    });
+
+            builder.DependencyGroups.Add(dependencySet);
+
+            ExceptionAssert.Throws<PackagingException>(() => builder.Save(new MemoryStream()),
+                "Some dependency group TFMs are missing a platform version: net5.0-windows");
         }
 
         [Fact]
@@ -2518,6 +2626,58 @@ Enabling license acceptance requires a license or a licenseUrl to be specified. 
             }
         }
 
+        [Theory]
+        [InlineData(".txt")]
+        [InlineData("")]
+        public void Icon_InvalidExtension_ThrowsException(string fileExtension)
+        {
+            var testDirBuilder = TestDirectoryBuilder.Create();
+            var nuspecBuilder = NuspecBuilder.Create();
+            var rng = new Random();
+
+            var iconFile = $"icon{fileExtension}";
+            var errorMessage = $"The 'icon' element '{iconFile}' has an invalid file extension. Valid options are .png, .jpg or .jpeg.";
+
+            nuspecBuilder
+                .WithIcon(iconFile)
+                .WithFile(iconFile);
+
+            testDirBuilder
+                .WithFile(iconFile, rng.Next(1, PackageBuilder.MaxIconFileSize))
+                .WithNuspec(nuspecBuilder);
+
+            SavePackageAndAssertException(
+                testDirBuilder: testDirBuilder,
+                exceptionMessage: errorMessage);
+        }
+
+        [Theory]
+        [InlineData(".jpeg")]
+        [InlineData(".jpg")]
+        [InlineData(".png")]
+        [InlineData(".PnG")]
+        [InlineData(".PNG")]
+        [InlineData(".jPG")]
+        [InlineData(".jpEG")]
+        public void Icon_ValidExtension_Succeeds(string fileExtension)
+        {
+            var testDirBuilder = TestDirectoryBuilder.Create();
+            var nuspecBuilder = NuspecBuilder.Create();
+            var rng = new Random();
+
+            var iconFile = $"icon{fileExtension}";
+
+            nuspecBuilder
+                .WithIcon(iconFile)
+                .WithFile(iconFile);
+
+            testDirBuilder
+                .WithFile(iconFile, rng.Next(1, PackageBuilder.MaxIconFileSize))
+                .WithNuspec(nuspecBuilder);
+
+            SavePackageAndAssertIcon(testDirBuilder, iconFile);
+        }
+
         [Fact]
         public void Icon_IconMaxFileSizeExceeded_ThrowsException()
         {
@@ -2532,7 +2692,7 @@ Enabling license acceptance requires a license or a licenseUrl to be specified. 
                 .WithFile("icon.jpg", PackageBuilder.MaxIconFileSize + 1)
                 .WithNuspec(nuspecBuilder);
 
-            TestIconPackaging(
+            SavePackageAndAssertException(
                 testDirBuilder: testDirBuilder,
                 exceptionMessage: "The icon file size must not exceed 1 megabyte.");
         }
@@ -2551,28 +2711,28 @@ Enabling license acceptance requires a license or a licenseUrl to be specified. 
                 .WithFile("icono.jpg", 100)
                 .WithNuspec(nuspecBuilder);
 
-            TestIconPackaging(
+            SavePackageAndAssertException(
                 testDirBuilder: testDirBuilder,
                 exceptionMessage: "The icon file 'icon.jpg' does not exist in the package.");
         }
 
         [Fact]
-        public void Icon_HappyPath_Suceed()
+        public void Icon_HappyPath_Succeeds()
         {
             var testDirBuilder = TestDirectoryBuilder.Create();
             var nuspecBuilder = NuspecBuilder.Create();
+            var iconFile = "icon.jpg";
+            var rng = new Random();
 
             nuspecBuilder
-                .WithIcon("icon.jpg")
-                .WithFile("icon.jpg");
+                .WithIcon(iconFile)
+                .WithFile(iconFile);
 
             testDirBuilder
-                .WithFile("icon.jpg", 400)
+                .WithFile(iconFile, rng.Next(1, 1024))
                 .WithNuspec(nuspecBuilder);
 
-            TestIconPackaging(
-                testDirBuilder: testDirBuilder,
-                exceptionMessage: null);
+            SavePackageAndAssertIcon(testDirBuilder, iconFile);
         }
 
         [Fact(Skip = "Need to solve https://github.com/NuGet/Home/issues/6941 to run this test case")]
@@ -2595,12 +2755,13 @@ Enabling license acceptance requires a license or a licenseUrl to be specified. 
                 .WithFile($"folder2{dirSep}file.txt", 2)
                 .WithNuspec(nuspecBuilder);
 
-            TestIconPackaging(
+            SavePackageAndAssertException(
                 testDirBuilder: testDirBuilder,
                 exceptionMessage: "Multiple files resolved as the embedded icon.");
         }
 
-        private void TestIconPackaging(TestDirectoryBuilder testDirBuilder, string exceptionMessage)
+
+        private void SavePackageAndAssertIcon(TestDirectoryBuilder testDirBuilder, string iconFileEntry)
         {
             using (var sourceDir = testDirBuilder.Build())
             using (var nuspecStream = File.OpenRead(testDirBuilder.NuspecPath)) //sourceDir.NuspecPath
@@ -2608,16 +2769,27 @@ Enabling license acceptance requires a license or a licenseUrl to be specified. 
             {
                 PackageBuilder pkgBuilder = new PackageBuilder(nuspecStream, testDirBuilder.BaseDir); //sourceDir.BaseDir
 
-                if (exceptionMessage != null)
+                pkgBuilder.Save(outputNuPkgStream);
+
+                outputNuPkgStream.Seek(0, SeekOrigin.Begin);
+
+                using (var par = new PackageArchiveReader(outputNuPkgStream))
                 {
-                    ExceptionAssert.Throws<PackagingException>(
-                        () => pkgBuilder.Save(outputNuPkgStream),
-                        exceptionMessage);
+                    Assert.Equal(iconFileEntry, par.NuspecReader.GetIcon());
                 }
-                else
-                {
-                    pkgBuilder.Save(outputNuPkgStream);
-                }
+            }
+        }
+
+        private void SavePackageAndAssertException(TestDirectoryBuilder testDirBuilder, string exceptionMessage)
+        {
+            using (var sourceDir = testDirBuilder.Build())
+            using (var nuspecStream = File.OpenRead(testDirBuilder.NuspecPath)) //sourceDir.NuspecPath
+            using (var outputNuPkgStream = new MemoryStream())
+            {
+                PackageBuilder pkgBuilder = new PackageBuilder(nuspecStream, testDirBuilder.BaseDir); //sourceDir.BaseDir
+
+                var ex = Assert.Throws<PackagingException>(() => pkgBuilder.Save(outputNuPkgStream));
+                Assert.Equal(exceptionMessage, ex.Message);
             }
         }
 

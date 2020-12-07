@@ -12,18 +12,20 @@ using System.Linq;
 using System.Reflection;
 using System.Reflection.Emit;
 using System.Xml.Linq;
+using NuGet.Client;
 using NuGet.Common;
+using NuGet.ContentModel;
 using NuGet.Frameworks;
 using NuGet.Packaging.Core;
 using NuGet.Packaging.PackageCreation.Resources;
 using NuGet.Packaging.Rules;
+using NuGet.RuntimeModel;
 using NuGet.Versioning;
 
 namespace NuGet.Packaging
 {
     public class PackageBuilder : IPackageMetadata
     {
-        private const string DefaultContentType = "application/octet";
         private static readonly Uri DefaultUri = new Uri("http://defaultcontainer/");
         internal const string ManifestRelationType = "manifest";
         private readonly bool _includeEmptyDirectories;
@@ -226,7 +228,7 @@ namespace NuGet.Packaging
         }
 
         /// <summary>
-        /// Exposes the additional properties extracted by the metadata 
+        /// Exposes the additional properties extracted by the metadata
         /// extractor or received from the command line.
         /// </summary>
         public Dictionary<string, string> Properties
@@ -312,7 +314,7 @@ namespace NuGet.Packaging
         {
             get
             {
-                return String.Join(" ", Tags);
+                return string.Join(" ", Tags);
             }
         }
 
@@ -377,8 +379,10 @@ namespace NuGet.Packaging
 
             ValidateDependencies(Version, DependencyGroups);
             ValidateReferenceAssemblies(Files, PackageAssemblyReferences);
+            ValidateFrameworkAssemblies(FrameworkReferences, FrameworkReferenceGroups);
             ValidateLicenseFile(Files, LicenseMetadata);
             ValidateIconFile(Files, Icon);
+            ValidateFileFrameworks(Files);
 
             using (var package = new ZipArchive(stream, ZipArchiveMode.Create, leaveOpen: true))
             {
@@ -543,6 +547,15 @@ namespace NuGet.Packaging
         private static void ValidateDependencies(SemanticVersion version,
             IEnumerable<PackageDependencyGroup> dependencies)
         {
+            var frameworksMissingPlatformVersion = new HashSet<string>(dependencies
+                .Select(group => group.TargetFramework)
+                .Where(groupFramework => groupFramework.HasPlatform && groupFramework.PlatformVersion == FrameworkConstants.EmptyVersion)
+                .Select(framework => framework.GetShortFolderName()));
+            if (frameworksMissingPlatformVersion.Any())
+            {
+                throw new PackagingException(NuGetLogCode.NU1012, String.Format(CultureInfo.CurrentCulture, Strings.MissingTargetPlatformVersionsFromDependencyGroups, string.Join(", ", frameworksMissingPlatformVersion.OrderBy(str => str))));
+            }
+
             if (version == null)
             {
                 // We have independent validation for null-versions.
@@ -557,8 +570,17 @@ namespace NuGet.Packaging
 
         public static void ValidateReferenceAssemblies(IEnumerable<IPackageFile> files, IEnumerable<PackageReferenceSet> packageAssemblyReferences)
         {
+            var frameworksMissingPlatformVersion = new HashSet<string>(packageAssemblyReferences
+                .Select(group => group.TargetFramework)
+                .Where(groupFramework => groupFramework.HasPlatform && groupFramework.PlatformVersion == FrameworkConstants.EmptyVersion)
+                .Select(framework => framework.GetShortFolderName()));
+            if (frameworksMissingPlatformVersion.Any())
+            {
+                throw new PackagingException(NuGetLogCode.NU1012, string.Format(CultureInfo.CurrentCulture, Strings.MissingTargetPlatformVersionsFromReferenceGroups, string.Join(", ", frameworksMissingPlatformVersion.OrderBy(str => str))));
+            }
+
             var libFiles = new HashSet<string>(from file in files
-                                               where !String.IsNullOrEmpty(file.Path) && file.Path.StartsWith("lib", StringComparison.OrdinalIgnoreCase)
+                                               where !string.IsNullOrEmpty(file.Path) && file.Path.StartsWith("lib", StringComparison.OrdinalIgnoreCase)
                                                select Path.GetFileName(file.Path), StringComparer.OrdinalIgnoreCase);
 
             foreach (var reference in packageAssemblyReferences.SelectMany(p => p.References))
@@ -568,9 +590,66 @@ namespace NuGet.Packaging
                     !libFiles.Contains(reference + ".exe") &&
                     !libFiles.Contains(reference + ".winmd"))
                 {
-                    throw new PackagingException(NuGetLogCode.NU5018, String.Format(CultureInfo.CurrentCulture, NuGetResources.Manifest_InvalidReference, reference));
+                    throw new PackagingException(NuGetLogCode.NU5018, string.Format(CultureInfo.CurrentCulture, NuGetResources.Manifest_InvalidReference, reference));
                 }
             }
+        }
+
+        private static void ValidateFrameworkAssemblies(IEnumerable<FrameworkAssemblyReference> references, IEnumerable<FrameworkReferenceGroup> referenceGroups)
+        {
+            // Check standalone references
+            var frameworksMissingPlatformVersion = new HashSet<string>(references
+                .SelectMany(reference => reference.SupportedFrameworks)
+                .Where(framework => framework.HasPlatform && framework.PlatformVersion == FrameworkConstants.EmptyVersion)
+                .Select(framework => framework.GetShortFolderName())
+            );
+            if (frameworksMissingPlatformVersion.Any())
+            {
+                throw new PackagingException(NuGetLogCode.NU1012, string.Format(CultureInfo.CurrentCulture, Strings.MissingTargetPlatformVersionsFromFrameworkAssemblyReferences, string.Join(", ", frameworksMissingPlatformVersion.OrderBy(str => str))));
+            }
+
+            // Check reference groups too
+            frameworksMissingPlatformVersion = new HashSet<string>(referenceGroups
+                .Select(group => group.TargetFramework)
+                .Where(groupFramework => groupFramework.HasPlatform && groupFramework.PlatformVersion == FrameworkConstants.EmptyVersion)
+                .Select(framework => framework.GetShortFolderName()));
+            if (frameworksMissingPlatformVersion.Any())
+            {
+                throw new PackagingException(NuGetLogCode.NU1012, string.Format(CultureInfo.CurrentCulture, Strings.MissingTargetPlatformVersionsFromFrameworkAssemblyGroups, string.Join(", ", frameworksMissingPlatformVersion.OrderBy(str => str))));
+            }
+        }
+
+        /// <summary>Looks for the specified file within the package</summary>
+        /// <param name="filePath">The file path to search for</param>
+        /// <param name="packageFiles">The list of files to search within</param>
+        /// <param name="filePathIncorrectCase">If the file was not found, this will be a path which almost matched but had the incorrect case</param>
+        /// <returns>An <see cref="IPackageFile"/> matching the specified path or <c>null</c></returns>
+        private static IPackageFile FindFileInPackage(string filePath, IEnumerable<IPackageFile> packageFiles, out string filePathIncorrectCase)
+        {
+            filePathIncorrectCase = null;
+            var strippedFilePath = PathUtility.StripLeadingDirectorySeparators(filePath);
+
+            foreach (var packageFile in packageFiles)
+            {
+                var strippedPackageFilePath = PathUtility.StripLeadingDirectorySeparators(packageFile.Path);
+
+                // This must use a case-sensitive string comparison, even on systems where file paths are normally case-sensitive.
+                // This is because Zip files are treated as case-sensitive. (See https://github.com/NuGet/Home/issues/9817)
+                if (strippedPackageFilePath.Equals(strippedFilePath, StringComparison.Ordinal))
+                {
+                    // Found the requested file in the package
+                    filePathIncorrectCase = null;
+                    return packageFile;
+                }
+                // Check for files that exist with the wrong file casing
+                else if (filePathIncorrectCase is null && strippedPackageFilePath.Equals(strippedFilePath, StringComparison.OrdinalIgnoreCase))
+                {
+                    filePathIncorrectCase = strippedPackageFilePath;
+                }
+            }
+
+            // We searched all of the package files and didn't find what we were looking for
+            return null;
         }
 
         private void ValidateLicenseFile(IEnumerable<IPackageFile> files, LicenseMetadata licenseMetadata)
@@ -584,42 +663,63 @@ namespace NuGet.Packaging
                 {
                     throw new PackagingException(NuGetLogCode.NU5031, string.Format(CultureInfo.CurrentCulture, NuGetResources.Manifest_LicenseFileExtensionIsInvalid, licenseMetadata.License));
                 }
-                var strippedLicenseFileLocation = PathUtility.StripLeadingDirectorySeparators(licenseMetadata.License);
-                var count = files.Where(e => PathUtility.StripLeadingDirectorySeparators(e.Path).Equals(strippedLicenseFileLocation, PathUtility.GetStringComparisonBasedOnOS())).Count();
-                if (count == 0)
+
+                if (FindFileInPackage(licenseMetadata.License, files, out var licenseFilePathWithIncorrectCase) is null)
                 {
-                    throw new PackagingException(NuGetLogCode.NU5030, string.Format(CultureInfo.CurrentCulture, NuGetResources.Manifest_LicenseFileIsNotInNupkg, licenseMetadata.License));
+                    string errorMessage;
+                    if (licenseFilePathWithIncorrectCase is null)
+                    {
+                        errorMessage = string.Format(CultureInfo.CurrentCulture, NuGetResources.Manifest_LicenseFileIsNotInNupkg, licenseMetadata.License);
+                    }
+                    else
+                    {
+                        errorMessage = string.Format(CultureInfo.CurrentCulture, NuGetResources.Manifest_LicenseFileIsNotInNupkgWithHint, licenseMetadata.License, licenseFilePathWithIncorrectCase);
+                    }
+
+                    throw new PackagingException(NuGetLogCode.NU5030, errorMessage);
                 }
             }
         }
 
         /// <summary>
         /// Given a list of resolved files,
-        /// determine which file will be used as the icon file and validate its size.
+        /// determine which file will be used as the icon file and validate its size and extension.
         /// </summary>
         /// <param name="files">Files resolved from the file entries in the nuspec</param>
-        /// <param name="iconPath">iconpath found in the .nuspec</param>
+        /// <param name="iconPath">icon entry found in the .nuspec</param>
         /// <exception cref="PackagingException">When a validation rule is not met</exception>
         private void ValidateIconFile(IEnumerable<IPackageFile> files, string iconPath)
         {
             if (!PackageTypes.Contains(PackageType.SymbolsPackage) && !string.IsNullOrEmpty(iconPath))
             {
-                // Validate entry
-                var iconPathStripped = PathUtility.StripLeadingDirectorySeparators(iconPath);
-
-                var iconFileList = files.Where(f =>
-                        iconPathStripped.Equals(
-                            PathUtility.StripLeadingDirectorySeparators(f.Path),
-                            PathUtility.GetStringComparisonBasedOnOS()));
-
-                if (iconFileList.Count() == 0)
+                var ext = Path.GetExtension(iconPath);
+                if (string.IsNullOrEmpty(ext) || (
+                        !ext.Equals(".jpeg", StringComparison.OrdinalIgnoreCase) &&
+                        !ext.Equals(".jpg", StringComparison.OrdinalIgnoreCase) &&
+                        !ext.Equals(".png", StringComparison.OrdinalIgnoreCase)))
                 {
                     throw new PackagingException(
-                        NuGetLogCode.NU5046,
-                        string.Format(CultureInfo.CurrentCulture, NuGetResources.IconNoFileElement, iconPath));
+                        NuGetLogCode.NU5045,
+                        string.Format(CultureInfo.CurrentCulture, NuGetResources.IconInvalidExtension, iconPath));
                 }
 
-                IPackageFile iconFile = iconFileList.First();
+                // Validate entry
+                IPackageFile iconFile = FindFileInPackage(iconPath, files, out var iconPathWithIncorrectCase);
+
+                if (iconFile is null)
+                {
+                    string errorMessage;
+                    if (iconPathWithIncorrectCase is null)
+                    {
+                        errorMessage = string.Format(CultureInfo.CurrentCulture, NuGetResources.IconNoFileElement, iconPath);
+                    }
+                    else
+                    {
+                        errorMessage = string.Format(CultureInfo.CurrentCulture, NuGetResources.IconNoFileElementWithHint, iconPath, iconPathWithIncorrectCase);
+                    }
+
+                    throw new PackagingException(NuGetLogCode.NU5046, errorMessage);
+                }
 
                 try
                 {
@@ -646,6 +746,63 @@ namespace NuGet.Packaging
                         NuGetLogCode.NU5046,
                         string.Format(CultureInfo.CurrentCulture, NuGetResources.IconCannotOpenFile, iconPath, e.Message));
                 }
+            }
+        }
+
+        private static void ValidateFileFrameworks(IEnumerable<IPackageFile> files)
+        {
+            var set = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var file in files.Where(t => t.Path != null).Select(t => PathUtility.GetPathWithDirectorySeparator(t.Path)))
+            {
+                set.Add(file);
+            }
+
+            var managedCodeConventions = new ManagedCodeConventions(new RuntimeGraph());
+            var collection = new ContentItemCollection();
+            collection.Load(set.Select(path => path.Replace('\\', '/')).ToArray());
+
+            var patterns = managedCodeConventions.Patterns;
+
+            var frameworkPatterns = new List<PatternSet>()
+            {
+                patterns.RuntimeAssemblies,
+                patterns.CompileRefAssemblies,
+                patterns.CompileLibAssemblies,
+                patterns.NativeLibraries,
+                patterns.ResourceAssemblies,
+                patterns.MSBuildFiles,
+                patterns.ContentFiles,
+                patterns.ToolsAssemblies,
+                patterns.EmbedAssemblies,
+                patterns.MSBuildTransitiveFiles
+            };
+            var warnPaths = new HashSet<string>();
+
+            var frameworksMissingPlatformVersion = new HashSet<string>();
+            foreach (var pattern in frameworkPatterns)
+            {
+                IEnumerable<ContentItemGroup> targetedItemGroups = ContentExtractor.GetContentForPattern(collection, pattern);
+                foreach (ContentItemGroup group in targetedItemGroups)
+                {
+                    foreach (ContentItem item in group.Items)
+                    {
+                        var framework = (NuGetFramework)item.Properties["tfm"];
+                        if (framework == null)
+                        {
+                            continue;
+                        }
+
+                        if (framework.HasPlatform && framework.PlatformVersion == FrameworkConstants.EmptyVersion)
+                        {
+                            frameworksMissingPlatformVersion.Add(framework.GetShortFolderName());
+                        }
+                    }
+                }
+            }
+
+            if (frameworksMissingPlatformVersion.Any())
+            {
+                throw new PackagingException(NuGetLogCode.NU1012, string.Format(CultureInfo.CurrentCulture, Strings.MissingTargetPlatformVersionsFromIncludedFiles, string.Join(", ", frameworksMissingPlatformVersion.OrderBy(str => str))));
             }
         }
 
@@ -817,7 +974,7 @@ namespace NuGet.Packaging
             if (!PathResolver.IsWildcardSearch(source) && !PathResolver.IsDirectoryPath(source) && !searchFiles.Any() && string.IsNullOrEmpty(exclude))
             {
                 throw new PackagingException(NuGetLogCode.NU5019,
-                    String.Format(CultureInfo.CurrentCulture, NuGetResources.PackageAuthoring_FileNotFound, source));
+                    string.Format(CultureInfo.CurrentCulture, NuGetResources.PackageAuthoring_FileNotFound, source));
             }
 
             Files.AddRange(searchFiles);
@@ -871,7 +1028,7 @@ namespace NuGet.Packaging
             {
                 packagePath = Path.GetFileName(fullPath);
             }
-            return Path.Combine(targetPath ?? String.Empty, packagePath);
+            return Path.Combine(targetPath ?? string.Empty, packagePath);
         }
 
         /// <summary>
@@ -902,7 +1059,7 @@ namespace NuGet.Packaging
 
         private static void ExcludeFiles(List<PhysicalPackageFile> searchFiles, string basePath, string exclude)
         {
-            if (String.IsNullOrEmpty(exclude))
+            if (string.IsNullOrEmpty(exclude))
             {
                 return;
             }
@@ -1051,7 +1208,7 @@ namespace NuGet.Packaging
                     new XAttribute(XNamespace.Xmlns + "dc", dcText),
                     new XAttribute(XNamespace.Xmlns + "dcterms", dctermsText),
                     new XAttribute(XNamespace.Xmlns + "xsi", xsiText),
-                    new XElement(dc + "creator", String.Join(", ", Authors)),
+                    new XElement(dc + "creator", string.Join(", ", Authors)),
                     new XElement(dc + "description", Description),
                     new XElement(dc + "identifier", Id),
                     new XElement(core + "version", Version.ToString()),

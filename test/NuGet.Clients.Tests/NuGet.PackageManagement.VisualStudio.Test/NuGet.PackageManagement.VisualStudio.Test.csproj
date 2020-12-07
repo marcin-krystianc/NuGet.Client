@@ -23,9 +23,10 @@
     <Reference Include="System.IO.Compression" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="Common\IProjectContextInfoExtensionsTests.cs" />
     <Compile Include="Feeds\SourceRepositoryCreator.cs" />
     <Compile Include="Feeds\SourceRepositoryExtensionsTests.cs" />
-    <Compile Include="NetCorePackageReferenceProjectTests.cs" />
+    <Compile Include="CpsPackageReferenceProjectTests.cs" />
     <Compile Include="ProjectSystems\LegacyPackageReferenceProjectTests.cs" />
     <Compile Include="DispatcherThreadCollection.cs" />
     <Compile Include="Feeds\MultiSourcePackageMetadataProviderTests.cs" />
@@ -33,9 +34,9 @@
     <Compile Include="Feeds\InstalledPackageFeedTests.cs" />
     <Compile Include="FrameworkAssemblyResolverTests.cs" />
     <Compile Include="ProjectSystems\LegacyPackageReferenceRestoreUtilityTests.cs" />
-    <Compile Include="ProjectSystems\ProjectKNuGetProjectTests.cs" />
     <Compile Include="ProjectSystems\ProjectSystemCacheTests.cs" />
     <Compile Include="ProjectSystems\TestVSProjectAdapter.cs" />
+    <Compile Include="Projects\CpsPackageReferenceProjectProviderTests.cs" />
     <Compile Include="Services\NuGetLockServiceTests.cs" />
     <Compile Include="Services\NuGetProjectManagerServiceTests.cs" />
     <Compile Include="Services\TestSharedServiceState.cs" />

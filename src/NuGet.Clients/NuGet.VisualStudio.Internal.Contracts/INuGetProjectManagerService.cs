@@ -1,8 +1,6 @@
 // Copyright (c) .NET Foundation. All rights reserved.
 // Licensed under the Apache License, Version 2.0. See License.txt in the project root for license information.
 
-#nullable enable
-
 using System;
 using System.Collections.Generic;
 using System.Threading;
@@ -46,7 +44,7 @@ namespace NuGet.VisualStudio.Internal.Contracts
             CancellationToken cancellationToken);
 
         ValueTask<IReadOnlyList<ProjectAction>> GetUninstallActionsAsync(
-            string projectId,
+            IReadOnlyCollection<string> projectIds,
             PackageIdentity packageIdentity,
             bool removeDependencies,
             bool forceRemove,

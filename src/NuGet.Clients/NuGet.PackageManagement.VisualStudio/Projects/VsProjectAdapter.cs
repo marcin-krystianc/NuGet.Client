@@ -9,6 +9,7 @@ using System.Linq;
 using System.Runtime.Versioning;
 using System.Threading.Tasks;
 using Microsoft;
+using Microsoft.VisualStudio.Shell;
 using Microsoft.VisualStudio.Shell.Interop;
 using NuGet.Commands;
 using NuGet.Common;
@@ -26,7 +27,6 @@ namespace NuGet.PackageManagement.VisualStudio
 
         private readonly VsHierarchyItem _vsHierarchyItem;
         private readonly Lazy<EnvDTE.Project> _dteProject;
-        private readonly IDeferredProjectWorkspaceService _workspaceService;
         private readonly IVsProjectThreadingService _threadingService;
         private readonly string _projectTypeGuid;
 
@@ -34,19 +34,16 @@ namespace NuGet.PackageManagement.VisualStudio
 
         #region Properties
 
-        public string MSBuildProjectExtensionsPath
+        public async Task<string> GetMSBuildProjectExtensionsPathAsync()
         {
-            get
+            var msbuildProjectExtensionsPath = BuildProperties.GetPropertyValue(ProjectBuildProperties.MSBuildProjectExtensionsPath);
+
+            if (string.IsNullOrEmpty(msbuildProjectExtensionsPath))
             {
-                var msbuildProjectExtensionsPath = BuildProperties.GetPropertyValue(ProjectBuildProperties.MSBuildProjectExtensionsPath);
-
-                if (string.IsNullOrEmpty(msbuildProjectExtensionsPath))
-                {
-                    return null;
-                }
-
-                return Path.Combine(ProjectDirectory, msbuildProjectExtensionsPath);
+                return null;
             }
+
+            return Path.Combine(await GetProjectDirectoryAsync(), msbuildProjectExtensionsPath);
         }
 
         public string RestorePackagesPath
@@ -100,19 +97,9 @@ namespace NuGet.PackageManagement.VisualStudio
 
         public string FullName => ProjectNames.FullName;
 
-        public string ProjectDirectory
+        public async Task<string> GetProjectDirectoryAsync()
         {
-            get
-            {
-                if (!IsDeferred)
-                {
-                    return Project.GetFullPath();
-                }
-                else
-                {
-                    return Path.GetDirectoryName(FullProjectPath);
-                }
-            }
+            return await Project.GetFullPathAsync();
         }
 
         public string FullProjectPath { get; private set; }
@@ -125,17 +112,9 @@ namespace NuGet.PackageManagement.VisualStudio
             }
         }
 
-        public bool IsSupported
+        public async Task<bool> IsSupportedAsync()
         {
-            get
-            {
-                if (!IsDeferred)
-                {
-                    return EnvDTEProjectUtility.IsSupported(Project);
-                }
-
-                return VsHierarchyUtility.IsSupported(VsHierarchy, _projectTypeGuid);
-            }
+            return await EnvDTEProjectUtility.IsSupportedAsync(Project);
         }
 
         public string PackageTargetFallback
@@ -221,14 +200,12 @@ namespace NuGet.PackageManagement.VisualStudio
             string projectTypeGuid,
             Func<IVsHierarchy, EnvDTE.Project> loadDteProject,
             IProjectBuildProperties buildProperties,
-            IVsProjectThreadingService threadingService,
-            IDeferredProjectWorkspaceService workspaceService = null)
+            IVsProjectThreadingService threadingService)
         {
             Assumes.Present(vsHierarchyItem);
 
             _vsHierarchyItem = vsHierarchyItem;
             _dteProject = new Lazy<EnvDTE.Project>(() => loadDteProject(_vsHierarchyItem.VsHierarchy));
-            _workspaceService = workspaceService;
             _threadingService = threadingService;
             _projectTypeGuid = projectTypeGuid;
 
@@ -245,7 +222,7 @@ namespace NuGet.PackageManagement.VisualStudio
         {
             if (!IsDeferred)
             {
-                return Project.GetProjectTypeGuids();
+                return await Project.GetProjectTypeGuidsAsync();
             }
             else
             {
@@ -278,28 +255,15 @@ namespace NuGet.PackageManagement.VisualStudio
             return null;
         }
 
-        public async Task<IEnumerable<string>> GetReferencedProjectsAsync()
+        public Task<IEnumerable<string>> GetReferencedProjectsAsync()
         {
-            if (!IsDeferred)
+            if (Project.Kind != null
+                && ProjectType.IsSupportedForAddingReferences(Project.Kind))
             {
-                if (Project.Kind != null
-                    && SupportedProjectTypes.IsSupportedForAddingReferences(Project.Kind))
-                {
-                    return EnvDTEProjectUtility.GetReferencedProjects(Project).Select(p => p.UniqueName);
-                }
-
-                return Enumerable.Empty<string>();
+                return System.Threading.Tasks.Task.FromResult(EnvDTEProjectUtility.GetReferencedProjects(Project).Select(p => p.UniqueName));
             }
-            else
-            {
-                var projectTypeGuids = await GetProjectTypeGuidsAsync();
-                if (projectTypeGuids.All(SupportedProjectTypes.IsSupportedForAddingReferences))
-                {
-                    return await _workspaceService.GetProjectReferencesAsync(FullProjectPath);
-                }
 
-                return Enumerable.Empty<string>();
-            }
+            return System.Threading.Tasks.Task.FromResult(Enumerable.Empty<string>());
         }
 
         public async Task<IEnumerable<RuntimeDescription>> GetRuntimeIdentifiersAsync()
@@ -442,6 +406,13 @@ namespace NuGet.PackageManagement.VisualStudio
                 targetPlatformMinVersion: platformMinVersion);
 
             return frameworkStrings.FirstOrDefault();
+        }
+
+        public async Task<bool> IsCapabilityMatchAsync(string capabilityExpression)
+        {
+            await _threadingService.JoinableTaskFactory.SwitchToMainThreadAsync();
+
+            return VsHierarchy.IsCapabilityMatch(capabilityExpression);
         }
 
         #endregion Getters
