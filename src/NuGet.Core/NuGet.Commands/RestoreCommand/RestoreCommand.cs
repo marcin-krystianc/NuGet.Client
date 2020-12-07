@@ -259,7 +259,7 @@ namespace NuGet.Commands
                 {
                     // Create assets file
                     assetsFile = BuildAssetsFile(
-                    _request.ExistingLockFile,
+                    null,
                     _request.Project,
                     graphs,
                     localRepositories,
@@ -393,7 +393,7 @@ namespace NuGet.Commands
                     checkResults,
                     msbuildOutputFiles,
                     assetsFile,
-                    _request.ExistingLockFile,
+                    null,
                     assetsFilePath,
                     cacheFile,
                     cacheFilePath,
@@ -980,7 +980,7 @@ namespace NuGet.Commands
             var projectRestoreRequest = new ProjectRestoreRequest(
                 _request,
                 _request.Project,
-                _request.ExistingLockFile,
+                null,
                 _logger)
             {
                 ParentId = _operationId
