@@ -4648,7 +4648,7 @@ namespace ClassLibrary
             }
         }
 
-        [PlatformFact(Platform.Windows, Skip = "https://github.com/NuGet/Home/issues/10133")]
+        [PlatformFact(Platform.Windows)]
         public void PackCommand_PackProjectWithCentralTransitiveDependencies()
         {
             using (var testDirectory = msbuildFixture.CreateTestDirectory())
