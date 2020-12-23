@@ -2,6 +2,7 @@
 // Licensed under the Apache License, Version 2.0. See License.txt in the project root for license information.
 
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using NuGet.ContentModel;
 using NuGet.Frameworks;
@@ -25,6 +26,9 @@ namespace NuGet.Commands
         private readonly Dictionary<CriteriaKey, List<List<SelectionCriteria>>> _criteriaSets =
             new Dictionary<CriteriaKey, List<List<SelectionCriteria>>>();
 
+        private readonly ConcurrentDictionary<CriteriaKey, LockFileTargetLibrary> _lockFileTargetLibraryCache =
+            new ConcurrentDictionary<CriteriaKey, LockFileTargetLibrary>();
+
         /// <summary>
         /// Get ordered selection criteria.
         /// </summary>
@@ -40,6 +44,25 @@ namespace NuGet.Commands
             }
 
             return criteria;
+        }
+
+        public LockFileTargetLibrary GetLockFileTargetLibrary(RestoreTargetGraph graph, NuGetFramework framework)
+        {
+            // Criteria are unique on graph and framework override.
+            var key = new CriteriaKey(graph.TargetGraphName, framework);
+            if (!_lockFileTargetLibraryCache.TryGetValue(key, out var lockFileTargetLibrary))
+            {
+                return lockFileTargetLibrary;
+            }
+
+            return null;
+        }
+
+        public void SetLockFileTargetLibrary(RestoreTargetGraph graph, NuGetFramework framework, LockFileTargetLibrary lockFileTargetLibrary)
+        {
+            // Criteria are unique on graph and framework override.
+            var key = new CriteriaKey(graph.TargetGraphName, framework);
+            _lockFileTargetLibraryCache.TryAdd(key, lockFileTargetLibrary);
         }
 
         /// <summary>
