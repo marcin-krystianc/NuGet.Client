@@ -81,7 +81,7 @@ namespace NuGet.Commands
             var runtimeIdentifier = targetGraph.RuntimeIdentifier;
             var framework = targetFrameworkOverride ?? targetGraph.Framework;
 
-            var cached = cache.GetLockFileTargetLibrary(targetGraph, targetFrameworkOverride);
+            var cached = cache.GetLockFileTargetLibrary(targetGraph, framework);
             if (cached != null)
                 return cached;
 
@@ -138,7 +138,7 @@ namespace NuGet.Commands
             // Exclude items
             ExcludeItems(lockFileLib, dependencyType);
 
-            cache.SetLockFileTargetLibrary(targetGraph, targetFrameworkOverride, lockFileLib);
+            cache.SetLockFileTargetLibrary(targetGraph, framework, lockFileLib);
             return lockFileLib;
         }
 
