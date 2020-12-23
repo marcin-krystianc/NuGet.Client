@@ -27,6 +27,17 @@ namespace NuGet.Commands
             RestoreCommandProviders dependencyProviders,
             SourceCacheContext cacheContext,
             ClientPolicyContext clientPolicyContext,
+            ILogger log)
+            :this(project, dependencyProviders, cacheContext, clientPolicyContext, new RestoreCommandCache(), log)
+        {
+
+        }
+
+        public RestoreRequest(
+            PackageSpec project,
+            RestoreCommandProviders dependencyProviders,
+            SourceCacheContext cacheContext,
+            ClientPolicyContext clientPolicyContext,
             RestoreCommandCache restoreCommandCache,
             ILogger log)
         {
