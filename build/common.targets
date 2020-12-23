@@ -59,24 +59,6 @@
     <UsePublicApiAnalyzer Condition=" '$(UsePublicApiAnalyzer)' == '' " >true</UsePublicApiAnalyzer>
   </PropertyGroup>
 
-  <ItemGroup Condition=" '$(UsePublicApiAnalyzer)' == 'true' ">
-    <PackageReference Include="Microsoft.CodeAnalysis.PublicApiAnalyzers" PrivateAssets="all" />
-
-    <None Remove="$(MSBuildProjectDirectory)\PublicAPI.Shipped.txt" />
-    <None Remove="$(MSBuildProjectDirectory)\PublicAPI.Unshipped.txt" />
-    <AdditionalFiles Include="$(MSBuildProjectDirectory)\PublicAPI.Shipped.txt" />
-    <AdditionalFiles Include="$(MSBuildProjectDirectory)\PublicAPI.Unshipped.txt" />
-  </ItemGroup>
-
-  <ItemGroup Condition=" '$(UsePublicApiAnalyzer)' == 'perTfm' ">
-    <PackageReference Include="Microsoft.CodeAnalysis.PublicApiAnalyzers" PrivateAssets="all" />
-
-    <None Remove="$(MSBuildProjectDirectory)\PublicAPI\$(TargetFramework)\PublicAPI.Shipped.txt" />
-    <None Remove="$(MSBuildProjectDirectory)\PublicAPI\$(TargetFramework)\PublicAPI.Unshipped.txt" />
-    <AdditionalFiles Include="$(MSBuildProjectDirectory)\PublicAPI\$(TargetFramework)\PublicAPI.Shipped.txt" />
-    <AdditionalFiles Include="$(MSBuildProjectDirectory)\PublicAPI\$(TargetFramework)\PublicAPI.Unshipped.txt" />
-  </ItemGroup>
-
   <Target Name="UnknownUsePublicApiAnalyzerValue"
           AfterTargets="Restore"
           Condition=" '$(UsePublicApiAnalyzer)' != ''

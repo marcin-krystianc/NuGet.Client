@@ -36,7 +36,8 @@ namespace NuGet.Commands
             PackageSpec project,
             IEnumerable<RestoreTargetGraph> targetGraphs,
             IReadOnlyList<NuGetv3LocalRepository> localRepositories,
-            RemoteWalkContext context)
+            RemoteWalkContext context,
+            RestoreCommandCache restoreCommandCache)
         {
             var lockFile = new LockFile()
             {
@@ -154,9 +155,6 @@ namespace NuGet.Commands
 
             var rootProjectStyle = project.RestoreMetadata?.ProjectStyle ?? ProjectStyle.Unknown;
 
-            // Cache package data and selection criteria across graphs.
-            var builderCache = new LockFileBuilderCache();
-
             // Add the targets
             foreach (var targetGraph in targetGraphs
                 .OrderBy(graph => graph.Framework.ToString(), StringComparer.Ordinal)
@@ -226,7 +224,7 @@ namespace NuGet.Commands
                             dependencyType: includeFlags,
                             targetFrameworkOverride: null,
                             dependencies: graphItem.Data.Dependencies,
-                            cache: builderCache);
+                            cache: restoreCommandCache.LockFileBuilderCache);
 
                         target.Libraries.Add(targetLibrary);
 
@@ -243,7 +241,7 @@ namespace NuGet.Commands
                                 targetFrameworkOverride: nonFallbackFramework,
                                 dependencyType: includeFlags,
                                 dependencies: graphItem.Data.Dependencies,
-                                cache: builderCache);
+                                cache: restoreCommandCache.LockFileBuilderCache);
 
                             if (!targetLibrary.Equals(targetLibraryWithoutFallback))
                             {
@@ -370,7 +368,7 @@ namespace NuGet.Commands
             }
 
             // Do not pack anything from the runtime graphs
-            // The runtime graphs are added in addition to the graphs without a runtime 
+            // The runtime graphs are added in addition to the graphs without a runtime
             foreach (var targetGraph in targetGraphs.Where(targetGraph => string.IsNullOrEmpty(targetGraph.RuntimeIdentifier)))
             {
                 var centralPackageVersionsForFramework = project.TargetFrameworks.Where(tfmi => tfmi.FrameworkName.Equals(targetGraph.Framework)).FirstOrDefault()?.CentralPackageVersions;

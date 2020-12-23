@@ -77,6 +77,8 @@ namespace NuGet.Commands
 
             using (var settingsLoadingContext = new SettingsLoadingContext())
             {
+                RestoreCommandCache restoreCommandCache = new RestoreCommandCache();
+
                 // Parallel.Foreach has an optimization for Arrays, so calling .ToArray() is better and adds almost no overhead
                 Parallel.ForEach(dgFile.Restore.ToArray(), parallelOptions, projectNameToRestore =>
                 {
@@ -94,7 +96,8 @@ namespace NuGet.Commands
                         externalClosure,
                         restoreContext,
                         projectDependencyGraphSpec,
-                        settingsLoadingContext);
+                        settingsLoadingContext,
+                        restoreCommandCache);
 
                     if (request.Request.ProjectStyle == ProjectStyle.DotnetCliTool)
                     {
@@ -148,7 +151,8 @@ namespace NuGet.Commands
             HashSet<ExternalProjectReference> projectReferenceClosure,
             RestoreArgs restoreArgs,
             DependencyGraphSpec projectDgSpec,
-            SettingsLoadingContext settingsLoadingContext)
+            SettingsLoadingContext settingsLoadingContext,
+            RestoreCommandCache restoreCommandCache)
         {
             var projectPackageSpec = projectDgSpec.GetProjectSpec(projectNameToRestore);
             //fallback paths, global packages path and sources need to all be passed in the dg spec
@@ -175,6 +179,7 @@ namespace NuGet.Commands
                 sharedCache,
                 restoreArgs.CacheContext,
                 clientPolicyContext,
+                restoreCommandCache,
                 restoreArgs.Log)
             {
                 // Set properties from the restore metadata
