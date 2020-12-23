@@ -19,12 +19,12 @@ namespace NuGet.Commands
     public class LockFileBuilderCache
     {
         // Package files
-        private readonly Dictionary<PackageIdentity, ContentItemCollection> _contentItems
-            = new Dictionary<PackageIdentity, ContentItemCollection>();
+        private readonly ConcurrentDictionary<PackageIdentity, ContentItemCollection> _contentItems
+            = new ConcurrentDictionary<PackageIdentity, ContentItemCollection>();
 
         // OrderedCriteria is stored per target graph + override framework.
-        private readonly Dictionary<CriteriaKey, List<List<SelectionCriteria>>> _criteriaSets =
-            new Dictionary<CriteriaKey, List<List<SelectionCriteria>>>();
+        private readonly ConcurrentDictionary<CriteriaKey, List<List<SelectionCriteria>>> _criteriaSets =
+            new ConcurrentDictionary<CriteriaKey, List<List<SelectionCriteria>>>();
 
         private readonly ConcurrentDictionary<CriteriaKey, LockFileTargetLibrary> _lockFileTargetLibraryCache =
             new ConcurrentDictionary<CriteriaKey, LockFileTargetLibrary>();
@@ -40,7 +40,7 @@ namespace NuGet.Commands
             if (!_criteriaSets.TryGetValue(key, out var criteria))
             {
                 criteria = LockFileUtils.CreateOrderedCriteriaSets(graph, framework);
-                _criteriaSets.Add(key, criteria);
+                _criteriaSets.TryAdd(key, criteria);
             }
 
             return criteria;
@@ -93,7 +93,7 @@ namespace NuGet.Commands
                     collection.Load(library.Files);
                 }
 
-                _contentItems.Add(identity, collection);
+                _contentItems.TryAdd(identity, collection);
             }
 
             return collection;
