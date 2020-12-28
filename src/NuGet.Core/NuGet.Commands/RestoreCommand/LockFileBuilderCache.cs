@@ -26,8 +26,8 @@ namespace NuGet.Commands
         private readonly ConcurrentDictionary<CriteriaKey, List<List<SelectionCriteria>>> _criteriaSets =
             new ConcurrentDictionary<CriteriaKey, List<List<SelectionCriteria>>>();
 
-        private readonly ConcurrentDictionary<CriteriaKey, LockFileTargetLibrary> _lockFileTargetLibraryCache =
-            new ConcurrentDictionary<CriteriaKey, LockFileTargetLibrary>();
+        private readonly ConcurrentDictionary<(CriteriaKey, LockFileLibrary), LockFileTargetLibrary> _lockFileTargetLibraryCache =
+            new ConcurrentDictionary<(CriteriaKey, LockFileLibrary), LockFileTargetLibrary>();
 
         /// <summary>
         /// Get ordered selection criteria.
@@ -46,11 +46,11 @@ namespace NuGet.Commands
             return criteria;
         }
 
-        public LockFileTargetLibrary GetLockFileTargetLibrary(RestoreTargetGraph graph, NuGetFramework framework)
+        public LockFileTargetLibrary GetLockFileTargetLibrary(RestoreTargetGraph graph, NuGetFramework framework, LockFileLibrary lockFileLibrary)
         {
             // Criteria are unique on graph and framework override.
             var key = new CriteriaKey(graph.TargetGraphName, framework);
-            if (!_lockFileTargetLibraryCache.TryGetValue(key, out var lockFileTargetLibrary))
+            if (_lockFileTargetLibraryCache.TryGetValue((key, lockFileLibrary), out var lockFileTargetLibrary))
             {
                 return lockFileTargetLibrary;
             }
@@ -58,11 +58,11 @@ namespace NuGet.Commands
             return null;
         }
 
-        public void SetLockFileTargetLibrary(RestoreTargetGraph graph, NuGetFramework framework, LockFileTargetLibrary lockFileTargetLibrary)
+        public void SetLockFileTargetLibrary(RestoreTargetGraph graph, NuGetFramework framework, LockFileLibrary lockFileLibrary, LockFileTargetLibrary lockFileTargetLibrary)
         {
             // Criteria are unique on graph and framework override.
             var key = new CriteriaKey(graph.TargetGraphName, framework);
-            _lockFileTargetLibraryCache.TryAdd(key, lockFileTargetLibrary);
+            _lockFileTargetLibraryCache.TryAdd((key, lockFileLibrary), lockFileTargetLibrary);
         }
 
         /// <summary>
