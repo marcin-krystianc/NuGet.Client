@@ -77,7 +77,7 @@ namespace NuGet.Commands
 
             using (var settingsLoadingContext = new SettingsLoadingContext())
             {
-                RestoreCommandCache restoreCommandCache = new RestoreCommandCache();
+                var restoreCommandCache = new RestoreCommandCache();
 
                 // Parallel.Foreach has an optimization for Arrays, so calling .ToArray() is better and adds almost no overhead
                 Parallel.ForEach(dgFile.Restore.ToArray(), parallelOptions, projectNameToRestore =>
@@ -90,7 +90,7 @@ namespace NuGet.Commands
                     ExternalProjectReference rootProject = externalClosure.Single(p =>
                         StringComparer.Ordinal.Equals(projectNameToRestore, p.UniqueName));
 
-                    RestoreSummaryRequest request = Create(
+                    var request = Create(
                         projectNameToRestore,
                         rootProject,
                         externalClosure,

@@ -18,14 +18,6 @@ namespace NuGet.Commands
     /// </summary>
     public class LockFileBuilderCache
     {
-        // Package files
-        private readonly ConcurrentDictionary<PackageIdentity, ContentItemCollection> _contentItems
-            = new ConcurrentDictionary<PackageIdentity, ContentItemCollection>();
-
-        // OrderedCriteria is stored per target graph + override framework.
-        private readonly ConcurrentDictionary<CriteriaKey, List<List<SelectionCriteria>>> _criteriaSets =
-            new ConcurrentDictionary<CriteriaKey, List<List<SelectionCriteria>>>();
-
         private readonly ConcurrentDictionary<(CriteriaKey, LockFileLibrary), LockFileTargetLibrary> _lockFileTargetLibraryCache =
             new ConcurrentDictionary<(CriteriaKey, LockFileLibrary), LockFileTargetLibrary>();
 
@@ -34,16 +26,7 @@ namespace NuGet.Commands
         /// </summary>
         public List<List<SelectionCriteria>> GetSelectionCriteria(RestoreTargetGraph graph, NuGetFramework framework)
         {
-            // Criteria are unique on graph and framework override.
-            var key = new CriteriaKey(graph.TargetGraphName, framework);
-
-            if (!_criteriaSets.TryGetValue(key, out var criteria))
-            {
-                criteria = LockFileUtils.CreateOrderedCriteriaSets(graph, framework);
-                _criteriaSets.TryAdd(key, criteria);
-            }
-
-            return criteria;
+            return LockFileUtils.CreateOrderedCriteriaSets(graph, framework);
         }
 
         public LockFileTargetLibrary GetLockFileTargetLibrary(RestoreTargetGraph graph, NuGetFramework framework, LockFileLibrary lockFileLibrary)
@@ -76,24 +59,17 @@ namespace NuGet.Commands
                 throw new ArgumentNullException(nameof(package));
             }
 
-            var identity = new PackageIdentity(package.Id, package.Version);
+            var collection = new ContentItemCollection();
 
-            if (!_contentItems.TryGetValue(identity, out var collection))
+            if (library == null)
             {
-                collection = new ContentItemCollection();
-
-                if (library == null)
-                {
-                    // Read folder
-                    collection.Load(package.Files);
-                }
-                else
-                {
-                    // Use existing library
-                    collection.Load(library.Files);
-                }
-
-                _contentItems.TryAdd(identity, collection);
+                // Read folder
+                collection.Load(package.Files);
+            }
+            else
+            {
+                // Use existing library
+                collection.Load(library.Files);
             }
 
             return collection;
