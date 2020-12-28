@@ -38,4 +38,4 @@ jobs:
         with:
           dotnet-version: 5.0.101
       - name: Build
-        run: build\build.ps1 -Configuration Release
+        run: .\build.ps1 -Configuration Release
