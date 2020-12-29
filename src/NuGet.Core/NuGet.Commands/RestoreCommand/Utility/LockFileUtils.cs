@@ -49,10 +49,9 @@ namespace NuGet.Commands
                 RestoreTargetGraph targetGraph,
                 LibraryIncludeFlags dependencyType,
                 NuGetFramework targetFrameworkOverride,
-                IEnumerable<LibraryDependency> dependencies,
-                LockFileBuilderCache cache)
+                IEnumerable<LibraryDependency> dependencies)
         {
-            return CreateLockFileTargetLibrary(libraryDependency: null, library, package, targetGraph, dependencyType, targetFrameworkOverride, dependencies, cache);
+            return CreateLockFileTargetLibrary(libraryDependency: null, library, package, targetGraph, dependencyType, targetFrameworkOverride, dependencies, new LockFileBuilderCache());
         }
 
         /// <summary>
