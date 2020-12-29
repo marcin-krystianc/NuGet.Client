@@ -16,7 +16,7 @@ using NuGet.Repositories;
 
 namespace NuGet.Commands
 {
-    public class LockFileBuilder
+    internal class LockFileBuilder
     {
         private readonly int _lockFileVersion;
         private readonly ILogger _logger;

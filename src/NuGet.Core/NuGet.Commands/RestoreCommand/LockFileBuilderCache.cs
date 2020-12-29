@@ -29,7 +29,7 @@ namespace NuGet.Commands
             return LockFileUtils.CreateOrderedCriteriaSets(graph, framework);
         }
 
-        public LockFileTargetLibrary GetLockFileTargetLibrary(RestoreTargetGraph graph, NuGetFramework framework, LockFileLibrary lockFileLibrary)
+        internal LockFileTargetLibrary GetLockFileTargetLibrary(RestoreTargetGraph graph, NuGetFramework framework, LockFileLibrary lockFileLibrary)
         {
             // Criteria are unique on graph and framework override.
             var key = new CriteriaKey(graph.TargetGraphName, framework);
@@ -41,7 +41,7 @@ namespace NuGet.Commands
             return null;
         }
 
-        public void SetLockFileTargetLibrary(RestoreTargetGraph graph, NuGetFramework framework, LockFileLibrary lockFileLibrary, LockFileTargetLibrary lockFileTargetLibrary)
+        internal void SetLockFileTargetLibrary(RestoreTargetGraph graph, NuGetFramework framework, LockFileLibrary lockFileLibrary, LockFileTargetLibrary lockFileTargetLibrary)
         {
             // Criteria are unique on graph and framework override.
             var key = new CriteriaKey(graph.TargetGraphName, framework);
