@@ -82,7 +82,7 @@ namespace NuGet.Commands
 
                 var request = requests.Dequeue();
 
-                var task = Task.Run(() => ExecuteAndCommitAsync(request, token), token);
+                var task = Task.Run(() => ExecuteAndCommitAsync(request, lockFileBuilderCache, token), token);
                 restoreTasks.Add(task);
             }
 
@@ -124,6 +124,7 @@ namespace NuGet.Commands
             var requests = new Queue<RestoreSummaryRequest>(restoreRequests);
             var restoreTasks = new List<Task<RestoreResultPair>>(maxTasks);
             var restoreResults = new List<RestoreResultPair>(maxTasks);
+            var lockFileBuilderCache = new LockFileBuilderCache();
 
             // Run requests
             while (requests.Count > 0)
@@ -137,7 +138,7 @@ namespace NuGet.Commands
 
                 var request = requests.Dequeue();
 
-                var task = Task.Run(() => ExecuteAsync(request, CancellationToken.None));
+                var task = Task.Run(() => ExecuteAsync(request, lockFileBuilderCache, CancellationToken.None));
                 restoreTasks.Add(task);
             }
 
