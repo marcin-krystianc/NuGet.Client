@@ -272,8 +272,7 @@ namespace NuGet.Commands
                     _request.Project,
                     graphs,
                     localRepositories,
-                    contextForProject,
-                    _lockFileBuilderCache
+                    contextForProject
                     );
                 }
 
@@ -742,8 +741,7 @@ namespace NuGet.Commands
             PackageSpec project,
             IEnumerable<RestoreTargetGraph> graphs,
             IReadOnlyList<NuGetv3LocalRepository> localRepositories,
-            RemoteWalkContext contextForProject,
-            LockFileBuilderCache lockFileBuilderCache)
+            RemoteWalkContext contextForProject)
         {
             // Build the lock file
             var lockFile = new LockFileBuilder(_request.LockFileVersion, _logger, _includeFlagGraphs)
@@ -753,7 +751,7 @@ namespace NuGet.Commands
                         graphs,
                         localRepositories,
                         contextForProject,
-                        lockFileBuilderCache);
+                        _lockFileBuilderCache);
 
             return lockFile;
         }

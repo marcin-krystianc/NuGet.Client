@@ -88,7 +88,7 @@ namespace NuGet.Commands
                     ExternalProjectReference rootProject = externalClosure.Single(p =>
                         StringComparer.Ordinal.Equals(projectNameToRestore, p.UniqueName));
 
-                    var request = Create(
+                    RestoreSummaryRequest request = Create(
                         projectNameToRestore,
                         rootProject,
                         externalClosure,
