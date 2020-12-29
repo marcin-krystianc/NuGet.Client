@@ -18,6 +18,14 @@ namespace NuGet.Commands
     /// </summary>
     public class LockFileBuilderCache
     {
+        // Package files
+        private readonly Dictionary<PackageIdentity, ContentItemCollection> _contentItems
+            = new Dictionary<PackageIdentity, ContentItemCollection>();
+
+        // OrderedCriteria is stored per target graph + override framework.
+        private readonly Dictionary<CriteriaKey, List<List<SelectionCriteria>>> _criteriaSets =
+            new Dictionary<CriteriaKey, List<List<SelectionCriteria>>>();
+
         private readonly ConcurrentDictionary<(CriteriaKey, LockFileLibrary), LockFileTargetLibrary> _lockFileTargetLibraryCache =
             new ConcurrentDictionary<(CriteriaKey, LockFileLibrary), LockFileTargetLibrary>();
 
@@ -26,7 +34,50 @@ namespace NuGet.Commands
         /// </summary>
         public List<List<SelectionCriteria>> GetSelectionCriteria(RestoreTargetGraph graph, NuGetFramework framework)
         {
-            return LockFileUtils.CreateOrderedCriteriaSets(graph, framework);
+            // Criteria are unique on graph and framework override.
+            var key = new CriteriaKey(graph.TargetGraphName, framework);
+
+            if (!_criteriaSets.TryGetValue(key, out var criteria))
+            {
+                criteria = LockFileUtils.CreateOrderedCriteriaSets(graph, framework);
+                _criteriaSets.Add(key, criteria);
+            }
+
+            return criteria;
+        }
+
+        /// <summary>
+        /// Get a ContentItemCollection of the package files.
+        /// </summary>
+        /// <remarks>Library is optional.</remarks>
+        public ContentItemCollection GetContentItems(LockFileLibrary library, LocalPackageInfo package)
+        {
+            if (package == null)
+            {
+                throw new ArgumentNullException(nameof(package));
+            }
+
+            var identity = new PackageIdentity(package.Id, package.Version);
+
+            if (!_contentItems.TryGetValue(identity, out var collection))
+            {
+                collection = new ContentItemCollection();
+
+                if (library == null)
+                {
+                    // Read folder
+                    collection.Load(package.Files);
+                }
+                else
+                {
+                    // Use existing library
+                    collection.Load(library.Files);
+                }
+
+                _contentItems.Add(identity, collection);
+            }
+            
+            return collection;
         }
 
         public LockFileTargetLibrary GetLockFileTargetLibrary(RestoreTargetGraph graph, NuGetFramework framework, LockFileLibrary lockFileLibrary)
@@ -46,33 +97,6 @@ namespace NuGet.Commands
             // Criteria are unique on graph and framework override.
             var key = new CriteriaKey(graph.TargetGraphName, framework);
             _lockFileTargetLibraryCache.TryAdd((key, lockFileLibrary), lockFileTargetLibrary);
-        }
-
-        /// <summary>
-        /// Get a ContentItemCollection of the package files.
-        /// </summary>
-        /// <remarks>Library is optional.</remarks>
-        public ContentItemCollection GetContentItems(LockFileLibrary library, LocalPackageInfo package)
-        {
-            if (package == null)
-            {
-                throw new ArgumentNullException(nameof(package));
-            }
-
-            var collection = new ContentItemCollection();
-
-            if (library == null)
-            {
-                // Read folder
-                collection.Load(package.Files);
-            }
-            else
-            {
-                // Use existing library
-                collection.Load(library.Files);
-            }
-
-            return collection;
         }
 
         private class CriteriaKey : IEquatable<CriteriaKey>
