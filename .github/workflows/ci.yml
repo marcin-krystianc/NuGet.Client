@@ -20,7 +20,7 @@ jobs:
       - name: Restore tools
         run: dotnet tool restore
       - name: Check format
-        run: dotnet format --check
+        run: dotnet format --check --exclude submodules
 
   build:
     if: github.event_name == 'push' || github.event.pull_request.head.repo.id != github.event.pull_request.base.repo.id
