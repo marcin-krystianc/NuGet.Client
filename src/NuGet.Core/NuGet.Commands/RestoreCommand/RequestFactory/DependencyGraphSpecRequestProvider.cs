@@ -32,7 +32,7 @@ namespace NuGet.Commands
             DependencyGraphSpec dgFile)
         {
             _dgFile = dgFile;
-            _providerCache = providerCache;;
+            _providerCache = providerCache;
         }
 
         public Task<IReadOnlyList<RestoreSummaryRequest>> CreateRequests(RestoreArgs restoreContext)

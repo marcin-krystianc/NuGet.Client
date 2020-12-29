@@ -179,8 +179,8 @@ namespace NuGet.Commands
         public bool HideWarningsAndErrors { get; set; } = false;
 
         /// <summary>
-        /// Gets or sets the <see cref="Packaging.PackageSaveMode"/>.
-        /// </summary>
+        /// Gets or sets the <see cref="Packaging.PackageSaveMode"/>. 
+        /// </summary> 
         public PackageSaveMode PackageSaveMode { get; set; } = PackageSaveMode.Defaultv3;
 
         public XmlDocFileSaveMode XmlDocFileSaveMode { get; set; } = PackageExtractionBehavior.XmlDocFileSaveMode;
