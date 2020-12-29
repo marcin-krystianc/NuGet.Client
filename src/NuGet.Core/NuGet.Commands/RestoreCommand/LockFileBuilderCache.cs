@@ -19,12 +19,12 @@ namespace NuGet.Commands
     public class LockFileBuilderCache
     {
         // Package files
-        private readonly Dictionary<PackageIdentity, ContentItemCollection> _contentItems
-            = new Dictionary<PackageIdentity, ContentItemCollection>();
+        private readonly ConcurrentDictionary<PackageIdentity, ContentItemCollection> _contentItems
+            = new ConcurrentDictionary<PackageIdentity, ContentItemCollection>();
 
         // OrderedCriteria is stored per target graph + override framework.
-        private readonly Dictionary<CriteriaKey, List<List<SelectionCriteria>>> _criteriaSets =
-            new Dictionary<CriteriaKey, List<List<SelectionCriteria>>>();
+        private readonly ConcurrentDictionary<CriteriaKey, List<List<SelectionCriteria>>> _criteriaSets =
+            new ConcurrentDictionary<CriteriaKey, List<List<SelectionCriteria>>>();
 
         private readonly ConcurrentDictionary<(CriteriaKey, LockFileLibrary), LockFileTargetLibrary> _lockFileTargetLibraryCache =
             new ConcurrentDictionary<(CriteriaKey, LockFileLibrary), LockFileTargetLibrary>();
@@ -36,14 +36,7 @@ namespace NuGet.Commands
         {
             // Criteria are unique on graph and framework override.
             var key = new CriteriaKey(graph.TargetGraphName, framework);
-
-            if (!_criteriaSets.TryGetValue(key, out var criteria))
-            {
-                criteria = LockFileUtils.CreateOrderedCriteriaSets(graph, framework);
-                _criteriaSets.Add(key, criteria);
-            }
-
-            return criteria;
+            return _criteriaSets.GetOrAdd(key, _ => LockFileUtils.CreateOrderedCriteriaSets(graph, framework));
         }
 
         /// <summary>
@@ -59,9 +52,9 @@ namespace NuGet.Commands
 
             var identity = new PackageIdentity(package.Id, package.Version);
 
-            if (!_contentItems.TryGetValue(identity, out var collection))
+            return _contentItems.GetOrAdd(identity, _ =>
             {
-                collection = new ContentItemCollection();
+                var collection = new ContentItemCollection();
 
                 if (library == null)
                 {
@@ -74,10 +67,8 @@ namespace NuGet.Commands
                     collection.Load(library.Files);
                 }
 
-                _contentItems.Add(identity, collection);
-            }
-            
-            return collection;
+                return collection;
+            });
         }
 
         public LockFileTargetLibrary GetLockFileTargetLibrary(RestoreTargetGraph graph, NuGetFramework framework, LockFileLibrary lockFileLibrary)
