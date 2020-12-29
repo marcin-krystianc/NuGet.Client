@@ -28,7 +28,7 @@ namespace NuGet.Commands
             SourceCacheContext cacheContext,
             ClientPolicyContext clientPolicyContext,
             ILogger log)
-            :this(project, dependencyProviders, cacheContext, clientPolicyContext, new RestoreCommandCache(), log)
+            : this(project, dependencyProviders, cacheContext, clientPolicyContext, new RestoreCommandCache(), log)
         {
 
         }
@@ -192,7 +192,7 @@ namespace NuGet.Commands
         /// </remarks>
         internal IPackageSignatureVerifier SignedPackageVerifier { get; set; }
 
-        internal RestoreCommandCache RestoreCommandCache { get; set;  }
+        internal RestoreCommandCache RestoreCommandCache { get; set; }
 
         public Guid ParentId { get; set; }
 
