@@ -38,12 +38,12 @@ namespace NuGet.Commands
             RestoreCommandProviders dependencyProviders,
             SourceCacheContext cacheContext,
             ClientPolicyContext clientPolicyContext,
-            RestoreCommandCache restoreCommandCache,
+            LockFileBuilderCache lockFileBuilderCache,
             ILogger log)
         {
 
             CacheContext = cacheContext ?? throw new ArgumentNullException(nameof(cacheContext));
-            RestoreCommandCache = restoreCommandCache;
+            LockFileBuilderCache = lockFileBuilderCache;
             Log = log ?? throw new ArgumentNullException(nameof(log));
             Project = project ?? throw new ArgumentNullException(nameof(project));
             DependencyProviders = dependencyProviders ?? throw new ArgumentNullException(nameof(dependencyProviders));
@@ -192,7 +192,7 @@ namespace NuGet.Commands
         /// </remarks>
         internal IPackageSignatureVerifier SignedPackageVerifier { get; set; }
 
-        internal RestoreCommandCache RestoreCommandCache { get; set; }
+        internal LockFileBuilderCache LockFileBuilderCache { get; set; }
 
         public Guid ParentId { get; set; }
 

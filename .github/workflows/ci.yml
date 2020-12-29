@@ -37,7 +37,7 @@ jobs:
         uses: actions/setup-dotnet@v1
         with:
           dotnet-version: 5.0.101
-      - name: Build_Debug_Skip_Unit_Test
+      - name: Build | Debug | SkipUnitTest
         run: .\build.ps1 -SkipUnitTest -Configuration Debug
-      - name: Build_Release
+      - name: Build | Release
         run: .\build.ps1 -Configuration Release

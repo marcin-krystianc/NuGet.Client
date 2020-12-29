@@ -37,7 +37,7 @@ namespace NuGet.Commands
             IEnumerable<RestoreTargetGraph> targetGraphs,
             IReadOnlyList<NuGetv3LocalRepository> localRepositories,
             RemoteWalkContext context,
-            RestoreCommandCache restoreCommandCache)
+            LockFileBuilderCache lockFileBuilderCache)
         {
             var lockFile = new LockFile()
             {
@@ -224,7 +224,7 @@ namespace NuGet.Commands
                             dependencyType: includeFlags,
                             targetFrameworkOverride: null,
                             dependencies: graphItem.Data.Dependencies,
-                            cache: restoreCommandCache.LockFileBuilderCache);
+                            cache: lockFileBuilderCache);
 
                         target.Libraries.Add(targetLibrary);
 
@@ -241,7 +241,7 @@ namespace NuGet.Commands
                                 targetFrameworkOverride: nonFallbackFramework,
                                 dependencyType: includeFlags,
                                 dependencies: graphItem.Data.Dependencies,
-                                cache: restoreCommandCache.LockFileBuilderCache);
+                                cache: lockFileBuilderCache);
 
                             if (!targetLibrary.Equals(targetLibraryWithoutFallback))
                             {

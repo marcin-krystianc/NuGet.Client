@@ -25,13 +25,14 @@ namespace NuGet.Commands
 
         private readonly DependencyGraphSpec _dgFile;
         private readonly RestoreCommandProvidersCache _providerCache;
+        private readonly LockFileBuilderCache _lockFileBuilderCache = new LockFileBuilderCache();
 
         public DependencyGraphSpecRequestProvider(
             RestoreCommandProvidersCache providerCache,
             DependencyGraphSpec dgFile)
         {
             _dgFile = dgFile;
-            _providerCache = providerCache;
+            _providerCache = providerCache;;
         }
 
         public Task<IReadOnlyList<RestoreSummaryRequest>> CreateRequests(RestoreArgs restoreContext)
@@ -77,8 +78,6 @@ namespace NuGet.Commands
 
             using (var settingsLoadingContext = new SettingsLoadingContext())
             {
-                var restoreCommandCache = new RestoreCommandCache();
-
                 // Parallel.Foreach has an optimization for Arrays, so calling .ToArray() is better and adds almost no overhead
                 Parallel.ForEach(dgFile.Restore.ToArray(), parallelOptions, projectNameToRestore =>
                 {
@@ -96,8 +95,7 @@ namespace NuGet.Commands
                         externalClosure,
                         restoreContext,
                         projectDependencyGraphSpec,
-                        settingsLoadingContext,
-                        restoreCommandCache);
+                        settingsLoadingContext);
 
                     if (request.Request.ProjectStyle == ProjectStyle.DotnetCliTool)
                     {
@@ -151,8 +149,7 @@ namespace NuGet.Commands
             HashSet<ExternalProjectReference> projectReferenceClosure,
             RestoreArgs restoreArgs,
             DependencyGraphSpec projectDgSpec,
-            SettingsLoadingContext settingsLoadingContext,
-            RestoreCommandCache restoreCommandCache)
+            SettingsLoadingContext settingsLoadingContext)
         {
             var projectPackageSpec = projectDgSpec.GetProjectSpec(projectNameToRestore);
             //fallback paths, global packages path and sources need to all be passed in the dg spec
@@ -179,7 +176,7 @@ namespace NuGet.Commands
                 sharedCache,
                 restoreArgs.CacheContext,
                 clientPolicyContext,
-                restoreCommandCache,
+                _lockFileBuilderCache,
                 restoreArgs.Log)
             {
                 // Set properties from the restore metadata
