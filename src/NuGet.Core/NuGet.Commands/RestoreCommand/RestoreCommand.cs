@@ -74,7 +74,7 @@ namespace NuGet.Commands
         // names for central package management version information
         private const string IsCentralVersionManagementEnabled = "IsCentralVersionManagementEnabled";
 
-        public RestoreCommand(RestoreRequest request) : this (request, new LockFileBuilderCache())
+        public RestoreCommand(RestoreRequest request) : this(request, new LockFileBuilderCache())
         {
         }
 
