@@ -33,7 +33,7 @@ namespace NuGet.Commands
 
         }
 
-        internal RestoreRequest(
+        public RestoreRequest(
             PackageSpec project,
             RestoreCommandProviders dependencyProviders,
             SourceCacheContext cacheContext,

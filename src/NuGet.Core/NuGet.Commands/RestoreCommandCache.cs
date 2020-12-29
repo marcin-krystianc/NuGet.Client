@@ -3,7 +3,7 @@
 
 namespace NuGet.Commands
 {
-    internal class RestoreCommandCache
+    public class RestoreCommandCache
     {
         // Cache package data and selection criteria across graphs.
         public LockFileBuilderCache LockFileBuilderCache { get; set; } = new LockFileBuilderCache();
