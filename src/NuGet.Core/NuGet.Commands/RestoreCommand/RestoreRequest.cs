@@ -22,28 +22,15 @@ namespace NuGet.Commands
 
         private Lazy<LockFile> _lockFileLazy;
 
-        internal RestoreRequest(
-            PackageSpec project,
-            RestoreCommandProviders dependencyProviders,
-            SourceCacheContext cacheContext,
-            ClientPolicyContext clientPolicyContext,
-            ILogger log)
-            : this(project, dependencyProviders, cacheContext, clientPolicyContext, new LockFileBuilderCache(), log)
-        {
-
-        }
-
         public RestoreRequest(
             PackageSpec project,
             RestoreCommandProviders dependencyProviders,
             SourceCacheContext cacheContext,
             ClientPolicyContext clientPolicyContext,
-            LockFileBuilderCache lockFileBuilderCache,
             ILogger log)
         {
 
             CacheContext = cacheContext ?? throw new ArgumentNullException(nameof(cacheContext));
-            LockFileBuilderCache = lockFileBuilderCache;
             Log = log ?? throw new ArgumentNullException(nameof(log));
             Project = project ?? throw new ArgumentNullException(nameof(project));
             DependencyProviders = dependencyProviders ?? throw new ArgumentNullException(nameof(dependencyProviders));
@@ -179,8 +166,8 @@ namespace NuGet.Commands
         public bool HideWarningsAndErrors { get; set; } = false;
 
         /// <summary>
-        /// Gets or sets the <see cref="Packaging.PackageSaveMode"/>. 
-        /// </summary> 
+        /// Gets or sets the <see cref="Packaging.PackageSaveMode"/>.
+        /// </summary>
         public PackageSaveMode PackageSaveMode { get; set; } = PackageSaveMode.Defaultv3;
 
         public XmlDocFileSaveMode XmlDocFileSaveMode { get; set; } = PackageExtractionBehavior.XmlDocFileSaveMode;
@@ -191,8 +178,6 @@ namespace NuGet.Commands
         /// This property should only be used to override the default verifier on tests.
         /// </remarks>
         internal IPackageSignatureVerifier SignedPackageVerifier { get; set; }
-
-        internal LockFileBuilderCache LockFileBuilderCache { get; set; }
 
         public Guid ParentId { get; set; }
 

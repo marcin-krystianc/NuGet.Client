@@ -25,7 +25,6 @@ namespace NuGet.Commands
 
         private readonly DependencyGraphSpec _dgFile;
         private readonly RestoreCommandProvidersCache _providerCache;
-        private readonly LockFileBuilderCache _lockFileBuilderCache = new LockFileBuilderCache();
 
         public DependencyGraphSpecRequestProvider(
             RestoreCommandProvidersCache providerCache,
@@ -176,7 +175,6 @@ namespace NuGet.Commands
                 sharedCache,
                 restoreArgs.CacheContext,
                 clientPolicyContext,
-                _lockFileBuilderCache,
                 restoreArgs.Log)
             {
                 // Set properties from the restore metadata
