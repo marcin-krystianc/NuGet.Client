@@ -138,7 +138,7 @@ namespace NuGet.Commands
             // Exclude items
             ExcludeItems(lockFileLib, dependencyType);
 
-            cache.SetLockFileTargetLibrary(targetGraph, framework, library, lockFileLib);
+            cache.TryAddLockFileTargetLibrary(targetGraph, framework, library, lockFileLib);
             return lockFileLib;
         }
 

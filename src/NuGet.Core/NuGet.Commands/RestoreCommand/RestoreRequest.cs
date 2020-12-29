@@ -22,13 +22,13 @@ namespace NuGet.Commands
 
         private Lazy<LockFile> _lockFileLazy;
 
-        public RestoreRequest(
+        internal RestoreRequest(
             PackageSpec project,
             RestoreCommandProviders dependencyProviders,
             SourceCacheContext cacheContext,
             ClientPolicyContext clientPolicyContext,
             ILogger log)
-            : this(project, dependencyProviders, cacheContext, clientPolicyContext, new RestoreCommandCache(), log)
+            : this(project, dependencyProviders, cacheContext, clientPolicyContext, new LockFileBuilderCache(), log)
         {
 
         }

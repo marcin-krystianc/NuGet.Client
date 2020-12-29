@@ -266,7 +266,7 @@ namespace NuGet.Commands
                     graphs,
                     localRepositories,
                     contextForProject,
-                    _request.RestoreCommandCache
+                    _request.LockFileBuilderCache
                     );
                 }
 
