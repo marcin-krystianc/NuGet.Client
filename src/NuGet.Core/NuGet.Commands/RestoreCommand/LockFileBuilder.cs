@@ -180,7 +180,11 @@ namespace NuGet.Commands
                     var library = graphItem.Key;
 
                     // include flags
-                    LibraryIncludeFlags includeFlags = LibraryIncludeFlags.All;
+                    LibraryIncludeFlags includeFlags;
+                    if (!flattenedFlags.TryGetValue(library.Name, out includeFlags))
+                    {
+                        includeFlags = ~LibraryIncludeFlags.ContentFiles;
+                    }
 
                     if (library.Type == LibraryType.Project || library.Type == LibraryType.ExternalProject)
                     {
