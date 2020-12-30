@@ -113,7 +113,7 @@ namespace NuGet.Commands
                     var packageInfo = NuGetv3LocalRepositoryUtility.GetPackage(localRepositories, library.Name, library.Version);
 
                     // Add the library if it was resolved, unresolved packages are not added to the assets file.
-                    if (packageInfo != null)
+                    //if (packageInfo != null)
                     {
                         var package = packageInfo.Package;
                         var resolver = packageInfo.Repository.PathResolver;
