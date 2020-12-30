@@ -6,6 +6,7 @@ using System.Collections.Concurrent;
 using System.Collections.Generic;
 using NuGet.ContentModel;
 using NuGet.Frameworks;
+using NuGet.LibraryModel;
 using NuGet.Packaging.Core;
 using NuGet.ProjectModel;
 using NuGet.Repositories;
@@ -26,8 +27,8 @@ namespace NuGet.Commands
         private readonly ConcurrentDictionary<CriteriaKey, List<List<SelectionCriteria>>> _criteriaSets =
             new ConcurrentDictionary<CriteriaKey, List<List<SelectionCriteria>>>();
 
-        private readonly ConcurrentDictionary<(CriteriaKey, LockFileLibrary), LockFileTargetLibrary> _lockFileTargetLibraryCache =
-            new ConcurrentDictionary<(CriteriaKey, LockFileLibrary), LockFileTargetLibrary>();
+        private readonly ConcurrentDictionary<(CriteriaKey, LockFileLibrary, string, LibraryIncludeFlags), LockFileTargetLibrary> _lockFileTargetLibraryCache =
+            new ConcurrentDictionary<(CriteriaKey, LockFileLibrary, string, LibraryIncludeFlags), LockFileTargetLibrary>();
 
         /// <summary>
         /// Get ordered selection criteria.
@@ -71,11 +72,12 @@ namespace NuGet.Commands
             });
         }
 
-        public LockFileTargetLibrary GetLockFileTargetLibrary(RestoreTargetGraph graph, NuGetFramework framework, LockFileLibrary lockFileLibrary)
+
+        public LockFileTargetLibrary GetLockFileTargetLibrary(RestoreTargetGraph graph, NuGetFramework framework, LockFileLibrary lockFileLibrary, string aliases, LibraryIncludeFlags libraryIncludeFlags)
         {
             // Criteria are unique on graph and framework override.
             var key = new CriteriaKey(graph.TargetGraphName, framework);
-            if (_lockFileTargetLibraryCache.TryGetValue((key, lockFileLibrary), out var lockFileTargetLibrary))
+            if (_lockFileTargetLibraryCache.TryGetValue((key, lockFileLibrary, aliases, libraryIncludeFlags), out var lockFileTargetLibrary))
             {
                 return lockFileTargetLibrary;
             }
@@ -83,11 +85,11 @@ namespace NuGet.Commands
             return null;
         }
 
-        public void TryAddLockFileTargetLibrary(RestoreTargetGraph graph, NuGetFramework framework, LockFileLibrary lockFileLibrary, LockFileTargetLibrary lockFileTargetLibrary)
+        public void TryAddLockFileTargetLibrary(RestoreTargetGraph graph, NuGetFramework framework, LockFileLibrary lockFileLibrary, string aliases, LibraryIncludeFlags libraryIncludeFlags, LockFileTargetLibrary lockFileTargetLibrary)
         {
             // Criteria are unique on graph and framework override.
             var key = new CriteriaKey(graph.TargetGraphName, framework);
-            _lockFileTargetLibraryCache.TryAdd((key, lockFileLibrary), lockFileTargetLibrary);
+            _lockFileTargetLibraryCache.TryAdd((key, lockFileLibrary, aliases, libraryIncludeFlags), lockFileTargetLibrary);
         }
 
         private class CriteriaKey : IEquatable<CriteriaKey>
