@@ -380,9 +380,9 @@ NuGet.Commands.LockFileBuilder.LockFileBuilder(int lockFileVersion, NuGet.Common
 NuGet.Commands.LockFileBuilderCache
 NuGet.Commands.LockFileBuilderCache.GetContentItems(NuGet.ProjectModel.LockFileLibrary library, NuGet.Repositories.LocalPackageInfo package) -> NuGet.ContentModel.ContentItemCollection
 NuGet.Commands.LockFileBuilderCache.GetSelectionCriteria(NuGet.Commands.RestoreTargetGraph graph, NuGet.Frameworks.NuGetFramework framework) -> System.Collections.Generic.List<System.Collections.Generic.List<NuGet.ContentModel.SelectionCriteria>>
-NuGet.Commands.LockFileBuilderCache.GetLockFileTargetLibrary(NuGet.Commands.RestoreTargetGraph graph, NuGet.Frameworks.NuGetFramework framework, NuGet.ProjectModel.LockFileLibrary lockFileLibrary, string aliases, NuGet.LibraryModel.LibraryIncludeFlags libraryIncludeFlags) -> NuGet.ProjectModel.LockFileTargetLibrary
+NuGet.Commands.LockFileBuilderCache.GetLockFileTargetLibrary(NuGet.Commands.RestoreTargetGraph graph, NuGet.Frameworks.NuGetFramework framework, NuGet.ProjectModel.LockFileLibrary lockFileLibrary, NuGet.LibraryModel.LibraryDependency libraryDependency, NuGet.LibraryModel.LibraryIncludeFlags libraryIncludeFlags) -> NuGet.ProjectModel.LockFileTargetLibrary
 NuGet.Commands.LockFileBuilderCache.LockFileBuilderCache() -> void
-NuGet.Commands.LockFileBuilderCache.TryAddLockFileTargetLibrary(NuGet.Commands.RestoreTargetGraph graph, NuGet.Frameworks.NuGetFramework framework, NuGet.ProjectModel.LockFileLibrary lockFileLibrary, string aliases, NuGet.LibraryModel.LibraryIncludeFlags libraryIncludeFlags, NuGet.ProjectModel.LockFileTargetLibrary lockFileTargetLibrary) -> void
+NuGet.Commands.LockFileBuilderCache.TryAddLockFileTargetLibrary(NuGet.Commands.RestoreTargetGraph graph, NuGet.Frameworks.NuGetFramework framework, NuGet.ProjectModel.LockFileLibrary lockFileLibrary, NuGet.LibraryModel.LibraryDependency libraryDependency, NuGet.LibraryModel.LibraryIncludeFlags libraryIncludeFlags, NuGet.ProjectModel.LockFileTargetLibrary lockFileTargetLibrary) -> void
 NuGet.Commands.LockFileUtils
 NuGet.Commands.MSBuildItem
 NuGet.Commands.MSBuildItem.GetProperty(string property) -> string

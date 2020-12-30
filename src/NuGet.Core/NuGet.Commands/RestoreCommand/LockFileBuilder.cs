@@ -230,7 +230,7 @@ namespace NuGet.Commands
                             var nonFallbackFramework = new NuGetFramework(target.TargetFramework);
 
                             var targetLibraryWithoutFallback = LockFileUtils.CreateLockFileTargetLibrary(
-                                libraryDependency?.Aliases,
+                                libraryDependency,
                                 libraries[Tuple.Create(library.Name, library.Version)],
                                 package,
                                 targetGraph,

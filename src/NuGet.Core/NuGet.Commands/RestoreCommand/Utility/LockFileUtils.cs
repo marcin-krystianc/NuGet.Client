@@ -32,7 +32,7 @@ namespace NuGet.Commands
             LibraryIncludeFlags dependencyType)
         {
             return CreateLockFileTargetLibrary(
-                aliases: null,
+                libraryDependency: null,
                 library,
                 package,
                 targetGraph,
@@ -52,13 +52,13 @@ namespace NuGet.Commands
                 IEnumerable<LibraryDependency> dependencies,
                 LockFileBuilderCache cache)
         {
-            return CreateLockFileTargetLibrary(aliases: null, library, package, targetGraph, dependencyType, targetFrameworkOverride, dependencies, cache);
+            return CreateLockFileTargetLibrary(libraryDependency: null, library, package, targetGraph, dependencyType, targetFrameworkOverride, dependencies, cache);
         }
 
         /// <summary>
         /// Create a lock file target library for the given <paramref name="library"/>
         /// </summary>
-        /// <param name="aliases"></param>
+        /// <param name="libraryDependency">The library dependency equivalent to <paramref name="library"/>. The library dependency contains metadata applicable during asset selection. Can be null.</param>
         /// <param name="library">The lock file library, expected to be for the equivalent package as <paramref name="library"/> and <paramref name="package"/>. </param>
         /// <param name="package">The local package info.</param>
         /// <param name="targetGraph">The target graph for which the asset selection needs to happen.</param>
@@ -68,7 +68,7 @@ namespace NuGet.Commands
         /// <param name="cache">The lock file build cache.</param>
         /// <returns>The LockFileTargetLibrary</returns>
         internal static LockFileTargetLibrary CreateLockFileTargetLibrary(
-                string aliases,
+                LibraryDependency libraryDependency,
                 LockFileLibrary library,
                 LocalPackageInfo package,
                 RestoreTargetGraph targetGraph,
@@ -81,7 +81,7 @@ namespace NuGet.Commands
             var runtimeIdentifier = targetGraph.RuntimeIdentifier;
             var framework = targetFrameworkOverride ?? targetGraph.Framework;
 
-            var cached = cache.GetLockFileTargetLibrary(targetGraph, framework, library, aliases, dependencyType);
+            var cached = cache.GetLockFileTargetLibrary(targetGraph, framework, library, libraryDependency, dependencyType);
             if (cached != null)
                 return cached;
 
@@ -117,7 +117,7 @@ namespace NuGet.Commands
                 }
                 else
                 {
-                    AddAssets(aliases, library, package, targetGraph, dependencyType, lockFileLib, framework, runtimeIdentifier, contentItems, nuspec, orderedCriteriaSets[i]);
+                    AddAssets(libraryDependency, library, package, targetGraph, dependencyType, lockFileLib, framework, runtimeIdentifier, contentItems, nuspec, orderedCriteriaSets[i]);
                     // Check if compatile assets were found.
                     // If no compatible assets were found and this is the last check
                     // continue on with what was given, this will fail in the normal
@@ -138,7 +138,7 @@ namespace NuGet.Commands
             // Exclude items
             ExcludeItems(lockFileLib, dependencyType);
 
-            cache.TryAddLockFileTargetLibrary(targetGraph, framework, library, aliases, dependencyType, lockFileLib);
+            cache.TryAddLockFileTargetLibrary(targetGraph, framework, library, libraryDependency, dependencyType, lockFileLib);
             return lockFileLib;
         }
 
@@ -170,11 +170,11 @@ namespace NuGet.Commands
             return orderedCriteriaSets;
         }
 
-        private static void ApplyAliases(string aliases, LockFileItem item)
+        private static void ApplyAliases(LibraryDependency libraryDependency, LockFileItem item)
         {
-            if (!string.IsNullOrEmpty(aliases))
+            if (!string.IsNullOrEmpty(libraryDependency?.Aliases))
             {
-                item.Properties.Add(LockFileItem.AliasesProperty, aliases);
+                item.Properties.Add(LockFileItem.AliasesProperty, libraryDependency.Aliases);
             }
         }
 
@@ -182,7 +182,7 @@ namespace NuGet.Commands
         /// Populate assets for a <see cref="LockFileLibrary"/>.
         /// </summary>
         private static void AddAssets(
-            string aliases,
+            LibraryDependency libraryDependency,
             LockFileLibrary library,
             LocalPackageInfo package,
             RestoreTargetGraph targetGraph,
@@ -199,7 +199,7 @@ namespace NuGet.Commands
 
             // Compile
             // Set-up action to update the compile time items.
-            Action<LockFileItem> applyAliases = (item) => ApplyAliases(aliases, item);
+            Action<LockFileItem> applyAliases = (item) => ApplyAliases(libraryDependency, item);
 
             // ref takes precedence over lib
             var compileGroup = GetLockFileItems(
