@@ -77,7 +77,6 @@ namespace NuGet.Commands
         /// </summary>
         public LockFileTargetLibrary TryGetLockFileTargetLibrary(RestoreTargetGraph graph, NuGetFramework framework, LockFileLibrary lockFileLibrary, LibraryDependency libraryDependency, LibraryIncludeFlags libraryIncludeFlags)
         {
-            // Criteria are unique on graph and framework override.
             var criteriaKey = new CriteriaKey(graph.TargetGraphName, framework);
             if (_lockFileTargetLibraryCache.TryGetValue((criteriaKey, lockFileLibrary, libraryDependency, libraryIncludeFlags), out var lockFileTargetLibrary))
             {
@@ -92,7 +91,6 @@ namespace NuGet.Commands
         /// </summary>
         public void TryAddLockFileTargetLibrary(RestoreTargetGraph graph, NuGetFramework framework, LockFileLibrary lockFileLibrary, LibraryDependency libraryDependency, LibraryIncludeFlags libraryIncludeFlags, LockFileTargetLibrary lockFileTargetLibrary)
         {
-            // Criteria are unique on graph and framework override.
             var criteriaKey = new CriteriaKey(graph.TargetGraphName, framework);
             _lockFileTargetLibraryCache.TryAdd((criteriaKey, lockFileLibrary, libraryDependency, libraryIncludeFlags), lockFileTargetLibrary);
         }
