@@ -72,11 +72,14 @@ namespace NuGet.Commands
             });
         }
 
+        /// <summary>
+        /// Try to get a LockFileTargetLibrary from cache.
+        /// </summary>
         public LockFileTargetLibrary TryGetLockFileTargetLibrary(RestoreTargetGraph graph, NuGetFramework framework, LockFileLibrary lockFileLibrary, LibraryDependency libraryDependency, LibraryIncludeFlags libraryIncludeFlags)
         {
             // Criteria are unique on graph and framework override.
-            var key = new CriteriaKey(graph.TargetGraphName, framework);
-            if (_lockFileTargetLibraryCache.TryGetValue((key, lockFileLibrary, libraryDependency, libraryIncludeFlags), out var lockFileTargetLibrary))
+            var criteriaKey = new CriteriaKey(graph.TargetGraphName, framework);
+            if (_lockFileTargetLibraryCache.TryGetValue((criteriaKey, lockFileLibrary, libraryDependency, libraryIncludeFlags), out var lockFileTargetLibrary))
             {
                 return lockFileTargetLibrary;
             }
@@ -84,11 +87,14 @@ namespace NuGet.Commands
             return null;
         }
 
+        /// <summary>
+        /// Add the LockFileTargetLibrary to cache.
+        /// </summary>
         public void TryAddLockFileTargetLibrary(RestoreTargetGraph graph, NuGetFramework framework, LockFileLibrary lockFileLibrary, LibraryDependency libraryDependency, LibraryIncludeFlags libraryIncludeFlags, LockFileTargetLibrary lockFileTargetLibrary)
         {
             // Criteria are unique on graph and framework override.
-            var key = new CriteriaKey(graph.TargetGraphName, framework);
-            _lockFileTargetLibraryCache.TryAdd((key, lockFileLibrary, libraryDependency, libraryIncludeFlags), lockFileTargetLibrary);
+            var criteriaKey = new CriteriaKey(graph.TargetGraphName, framework);
+            _lockFileTargetLibraryCache.TryAdd((criteriaKey, lockFileLibrary, libraryDependency, libraryIncludeFlags), lockFileTargetLibrary);
         }
 
         private class CriteriaKey : IEquatable<CriteriaKey>
