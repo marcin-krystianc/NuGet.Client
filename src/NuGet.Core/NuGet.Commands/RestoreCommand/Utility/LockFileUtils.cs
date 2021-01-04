@@ -81,7 +81,7 @@ namespace NuGet.Commands
             var runtimeIdentifier = targetGraph.RuntimeIdentifier;
             var framework = targetFrameworkOverride ?? targetGraph.Framework;
 
-            var cached = cache.GetLockFileTargetLibrary(targetGraph, framework, library, libraryDependency, dependencyType);
+            var cached = cache.TryGetLockFileTargetLibrary(targetGraph, framework, library, libraryDependency, dependencyType);
             if (cached != null)
                 return cached;
 
