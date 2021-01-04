@@ -6,7 +6,6 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Globalization;
 using System.Linq;
-using CallContextProfiling;
 using NuGet.Common;
 using NuGet.DependencyResolver;
 using NuGet.Frameworks;
@@ -215,25 +214,17 @@ namespace NuGet.Commands
                         }
 
                         var package = packageInfo.Package;
-                        LibraryDependency libraryDependency;
-                        using (CallContextProfiler.NamedStep("libraryDependency"))
-                        {
-                            libraryDependency = tfi.Dependencies.FirstOrDefault(e => e.Name.Equals(library.Name, StringComparison.OrdinalIgnoreCase));
-                        }
+                        var libraryDependency = tfi.Dependencies.FirstOrDefault(e => e.Name.Equals(library.Name, StringComparison.OrdinalIgnoreCase));
 
-                        LockFileTargetLibrary targetLibrary;
-                        using (CallContextProfiler.NamedStep("CreateLockFileTargetLibrary"))
-                        {
-                            targetLibrary = LockFileUtils.CreateLockFileTargetLibrary(
-                                libraryDependency,
-                                libraries[Tuple.Create(library.Name, library.Version)],
-                                package,
-                                targetGraph,
-                                dependencyType: includeFlags,
-                                targetFrameworkOverride: null,
-                                dependencies: graphItem.Data.Dependencies,
-                                cache: lockFileBuilderCache);
-                        }
+                        var targetLibrary = LockFileUtils.CreateLockFileTargetLibrary(
+                            libraryDependency,
+                            libraries[Tuple.Create(library.Name, library.Version)],
+                            package,
+                            targetGraph,
+                            dependencyType: includeFlags,
+                            targetFrameworkOverride: null,
+                            dependencies: graphItem.Data.Dependencies,
+                            cache: lockFileBuilderCache);
 
                         target.Libraries.Add(targetLibrary);
 
