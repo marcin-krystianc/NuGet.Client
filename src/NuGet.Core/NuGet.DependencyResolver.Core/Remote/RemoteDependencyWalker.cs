@@ -195,7 +195,6 @@ namespace NuGet.DependencyResolver
                             tasks = new List<Task<GraphNode<RemoteResolveResult>>>(1);
                         }
 
-                        /*
                         var nodeTask = graphNodesCache.GetOrAdd(dependency.LibraryRange, _ =>
                             new Lazy<Task<GraphNode<RemoteResolveResult>>>(() => CreateGraphNode(
                                 dependency.LibraryRange,
@@ -206,8 +205,9 @@ namespace NuGet.DependencyResolver
                                 innerEdge,
                                 transitiveCentralPackageVersions,
                                 graphNodesCache)));
+
                         tasks.Add(nodeTask.Value);
-*/
+/*
                         var nodeTask = CreateGraphNode(
                                 dependency.LibraryRange,
                                 framework,
@@ -217,8 +217,8 @@ namespace NuGet.DependencyResolver
                                 innerEdge,
                                 transitiveCentralPackageVersions,
                                 graphNodesCache);
-
                         tasks.Add(nodeTask);
+*/
                     }
                     else
                     {

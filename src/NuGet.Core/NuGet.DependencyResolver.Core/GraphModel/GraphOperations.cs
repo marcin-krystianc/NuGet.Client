@@ -36,6 +36,19 @@ namespace NuGet.DependencyResolver
             return result;
         }
 
+        public static AnalyzeResult<RemoteResolveResult> Analyze2(this GraphNode<RemoteResolveResult> root)
+        {
+            var result = new AnalyzeResult<RemoteResolveResult>();
+
+            root.CheckCycleAndNearestWins(result.Downgrades, result.Cycles);
+            root.TryResolveConflicts(result.VersionConflicts);
+
+            // Remove all downgrades that didn't result in selecting the node we actually downgraded to
+            result.Downgrades.RemoveAll(d => d.DowngradedTo.Disposition != Disposition.Accepted);
+
+            return result;
+        }
+
         private static void CheckCycleAndNearestWins(
             this GraphNode<RemoteResolveResult> root,
             List<DowngradeResult<RemoteResolveResult>> downgrades,
