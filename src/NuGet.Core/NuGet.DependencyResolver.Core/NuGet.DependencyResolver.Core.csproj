@@ -20,7 +20,6 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\..\..\lib\CallContextProfiling\CallContextProfiling.csproj" />
     <ProjectReference Include="..\NuGet.LibraryModel\NuGet.LibraryModel.csproj" />
     <ProjectReference Include="..\NuGet.Protocol\NuGet.Protocol.csproj" />
   </ItemGroup>
@@ -40,6 +39,6 @@
     </EmbeddedResource>
   </ItemGroup>
 
-  <Import Project="$(BuildCommonDirectory)common.targets" />
+  <Import Project="$(BuildCommonDirectory)common.targets"/>
   <Import Project="Sdk.targets" Sdk="Microsoft.NET.Sdk" />
 </Project>
