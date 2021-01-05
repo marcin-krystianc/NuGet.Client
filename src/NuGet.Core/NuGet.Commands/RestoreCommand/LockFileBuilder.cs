@@ -368,7 +368,7 @@ namespace NuGet.Commands
             }
 
             // Do not pack anything from the runtime graphs
-            // The runtime graphs are added in addition to the graphs without a runtime
+            // The runtime graphs are added in addition to the graphs without a runtime 
             foreach (var targetGraph in targetGraphs.Where(targetGraph => string.IsNullOrEmpty(targetGraph.RuntimeIdentifier)))
             {
                 var centralPackageVersionsForFramework = project.TargetFrameworks.Where(tfmi => tfmi.FrameworkName.Equals(targetGraph.Framework)).FirstOrDefault()?.CentralPackageVersions;
