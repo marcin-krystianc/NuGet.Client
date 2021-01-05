@@ -80,11 +80,9 @@ namespace NuGet.Commands
                 }
 
                 var request = requests.Dequeue();
-                //if (request.InputPath.EndsWith("App.csproj", StringComparison.OrdinalIgnoreCase))
-                {
-                    var task = Task.Run(() => ExecuteAndCommitAsync(request, token), token);
-                    restoreTasks.Add(task);
-                }
+
+                var task = Task.Run(() => ExecuteAndCommitAsync(request, token), token);
+                restoreTasks.Add(task);
             }
 
             // Wait for all restores to finish

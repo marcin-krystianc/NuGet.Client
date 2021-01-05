@@ -61,13 +61,12 @@ namespace NuGet.Commands
             foreach (var pair in runtimesByFramework)
             {
                 _logger.LogVerbose(string.Format(CultureInfo.CurrentCulture, Strings.Log_RestoringPackages, pair.Key.DotNetFrameworkName));
-                var task = WalkDependenciesAsync(projectRange,
+
+                frameworkTasks.Add(WalkDependenciesAsync(projectRange,
                     pair.Key,
                     remoteWalker,
                     context,
-                    token: token);
-                await task;
-                frameworkTasks.Add(task);
+                    token: token));
             }
 
             var frameworkGraphs = await Task.WhenAll(frameworkTasks);
