@@ -573,9 +573,6 @@ namespace NuGet.DependencyResolver
                     root.RejectCentralTransitiveBecauseOfRejectedParents(tracker, centralTransitiveNodes);
                 }
 
-                // Inform tracker of ambiguity beneath nodes that are not resolved yet
-                root.ForEach(WalkState.Walking, (node, state, context) => WalkTreeMarkAmbiguousNodes(node, state, context), tracker);
-
                 if (hasCentralTransitiveDependencies)
                 {
                     DetectAndMarkAmbiguousCentralTransitiveDependencies(tracker, centralTransitiveNodes);
@@ -642,38 +639,6 @@ namespace NuGet.DependencyResolver
                     }
                 }
             }
-        }
-
-        private static WalkState WalkTreeMarkAmbiguousNodes<TItem>(GraphNode<TItem> node, WalkState state, Tracker<TItem> context)
-        {
-            // between:
-            // a1->b1->d1->x1
-            // a1->c1->d2->z1
-            // first attempt
-            //  d1/d2 are considered disputed
-            //  x1 and z1 are considered ambiguous
-            //  d1 is rejected
-            // second attempt
-            //  d1 is rejected, d2 is accepted
-            //  x1 is no longer seen, and z1 is not ambiguous
-            //  z1 is accepted
-            if (node.Disposition == Disposition.Rejected)
-            {
-                return WalkState.Rejected;
-            }
-
-            if (state == WalkState.Walking
-                && context.IsDisputed(node.Item))
-            {
-                return WalkState.Ambiguous;
-            }
-
-            if (state == WalkState.Ambiguous)
-            {
-                context.MarkAmbiguous(node.Item);
-            }
-
-            return state;
         }
 
         private static bool WalkTreeRejectNodesOfRejectedNodes<TItem>(bool state, GraphNode<TItem> node, Tracker<TItem> context)
