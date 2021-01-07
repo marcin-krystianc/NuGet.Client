@@ -1682,7 +1682,7 @@ namespace NuGet.DependencyResolver.Tests
                 node = node.OuterNodes.FirstOrDefault();
             }
 
-            Assert.Equal(matches, items);
+            Assert.Equal(items, matches);
         }
 
         private Task<GraphNode<RemoteResolveResult>> DoWalkAsync(RemoteDependencyWalker walker, string name)

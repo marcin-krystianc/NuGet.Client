@@ -23,6 +23,21 @@ namespace NuGet.DependencyResolver
             Ambiguous
         }
 
+        public static AnalyzeResult<RemoteResolveResult> Analyze2(this GraphNode<RemoteResolveResult> root)
+        {
+            var result = new AnalyzeResult<RemoteResolveResult>();
+
+            //root.CheckCycleAndNearestWins(result.Downgrades, result.Cycles);
+            root.CheckCycles(result.Cycles);
+            root.FlattenTheGraph(result.Downgrades, result.VersionConflicts);
+            //root.TryResolveConflicts(result.VersionConflicts);
+
+            // Remove all downgrades that didn't result in selecting the node we actually downgraded to
+            // result.Downgrades.RemoveAll(d => d.DowngradedTo.Disposition != Disposition.Accepted);
+
+            return result;
+        }
+
         public static AnalyzeResult<RemoteResolveResult> Analyze(this GraphNode<RemoteResolveResult> root)
         {
             var result = new AnalyzeResult<RemoteResolveResult>();
@@ -36,17 +51,200 @@ namespace NuGet.DependencyResolver
             return result;
         }
 
-        public static AnalyzeResult<RemoteResolveResult> Analyze2(this GraphNode<RemoteResolveResult> root)
+        private static void FlattenTheGraph(this GraphNode<RemoteResolveResult> root,
+            List<DowngradeResult<RemoteResolveResult>> downgrades,
+            List<VersionConflictResult<RemoteResolveResult>> conflicts)
         {
-            var result = new AnalyzeResult<RemoteResolveResult>();
+            var processedNodes = new HashSet<GraphNode<RemoteResolveResult>>();
+            var nodesToProcess = new HashSet<GraphNode<RemoteResolveResult>>();
+            root.ForEach((node, context) => CollectLeafNodes(context, node), nodesToProcess);
+            for (;;)
+            {
+                var nodeToProcess = nodesToProcess.FirstOrDefault();
+                if (nodeToProcess == null)
+                    return;
 
-            root.CheckCycleAndNearestWins(result.Downgrades, result.Cycles);
-            root.TryResolveConflicts(result.VersionConflicts);
+                nodesToProcess.Remove(nodeToProcess);
+                processedNodes.Add(nodeToProcess);
 
-            // Remove all downgrades that didn't result in selecting the node we actually downgraded to
-            result.Downgrades.RemoveAll(d => d.DowngradedTo.Disposition != Disposition.Accepted);
+                var transitiveNodesToPropagate = new List<GraphNode<RemoteResolveResult>>();
+                foreach (var transitiveNode in nodeToProcess.TransitiveNodes)
+                {
+                    var eclipsingInnerNode = nodeToProcess.InnerNodes.FirstOrDefault(x => transitiveNode.Key.IsEclipsedBy(x.Key));
 
-            return result;
+                    if (eclipsingInnerNode != null)
+                    {
+                        if (eclipsingInnerNode.Key.VersionRange != null &&
+                            transitiveNode.Key.VersionRange != null &&
+                            !IsGreaterThanOrEqualTo(eclipsingInnerNode.Key.VersionRange,
+                                transitiveNode.Key.VersionRange))
+                        {
+                            // downgrade
+                            downgrades.Add(new DowngradeResult<RemoteResolveResult>() {DowngradedFrom = transitiveNode, DowngradedTo = eclipsingInnerNode});
+                        }
+                    }
+                    else
+                    {
+                        transitiveNodesToPropagate.Add(transitiveNode);
+                    }
+                }
+
+                foreach (var outerNode in nodeToProcess.OuterNodes)
+                {
+                    if (!outerNode.InnerNodes.Except(processedNodes).Any())
+                    {
+                        nodesToProcess.Add(outerNode);
+                    }
+
+                    foreach (var transitiveNodeToPropagate in transitiveNodesToPropagate.Concat(nodeToProcess.InnerNodes))
+                    {
+                        var potentiallyConflictingTransitiveNode = outerNode.TransitiveNodes.FirstOrDefault(x =>
+                            transitiveNodeToPropagate.Key.IsEclipsedBy(x.Key));
+
+                        if (potentiallyConflictingTransitiveNode == null)
+                        {
+                            outerNode.TransitiveNodes.Add(transitiveNodeToPropagate);
+                        }
+                        else
+                        {
+                            var commonSubSet = VersionRange.CommonSubSet(new[] {potentiallyConflictingTransitiveNode.Key.VersionRange, transitiveNodeToPropagate.Key.VersionRange});
+                            if (commonSubSet.Equals(VersionRange.None))
+                            {
+                                conflicts.Add(new VersionConflictResult<RemoteResolveResult>(){Selected = potentiallyConflictingTransitiveNode, Conflicting = transitiveNodeToPropagate });
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Verifies if minimum version specification for nearVersion is greater than the
+        // minimum version specification for farVersion
+        public static bool IsGreaterThanOrEqualTo(VersionRange nearVersion, VersionRange farVersion)
+        {
+            if (!nearVersion.HasLowerBound)
+            {
+                return true;
+            }
+            else if (!farVersion.HasLowerBound)
+            {
+                return false;
+            }
+            else if (nearVersion.IsFloating || farVersion.IsFloating)
+            {
+                NuGetVersion nearMinVersion;
+                NuGetVersion farMinVersion;
+
+                string nearRelease;
+                string farRelease;
+
+                if (nearVersion.IsFloating)
+                {
+                    if (nearVersion.Float.FloatBehavior == NuGetVersionFloatBehavior.Major)
+                    {
+                        // nearVersion: "*"
+                        return true;
+                    }
+
+                    nearMinVersion = GetReleaseLabelFreeVersion(nearVersion);
+                    nearRelease = nearVersion.Float.OriginalReleasePrefix;
+                }
+                else
+                {
+                    nearMinVersion = nearVersion.MinVersion;
+                    nearRelease = nearVersion.MinVersion.Release;
+                }
+
+                if (farVersion.IsFloating)
+                {
+                    if (farVersion.Float.FloatBehavior == NuGetVersionFloatBehavior.Major)
+                    {
+                        // farVersion: "*"
+                        return false;
+                    }
+
+                    farMinVersion = GetReleaseLabelFreeVersion(farVersion);
+                    farRelease = farVersion.Float.OriginalReleasePrefix;
+                }
+                else
+                {
+                    farMinVersion = farVersion.MinVersion;
+                    farRelease = farVersion.MinVersion.Release;
+                }
+
+                var result = nearMinVersion.CompareTo(farMinVersion, VersionComparison.Version);
+                if (result != 0)
+                {
+                    return result > 0;
+                }
+
+                if (string.IsNullOrEmpty(nearRelease))
+                {
+                    // near is 1.0.0-*
+                    return true;
+                }
+                else if (string.IsNullOrEmpty(farRelease))
+                {
+                    // near is 1.0.0-alpha-* and far is 1.0.0-*
+                    return false;
+                }
+                else
+                {
+                    var lengthToCompare = Math.Min(nearRelease.Length, farRelease.Length);
+
+                    return StringComparer.OrdinalIgnoreCase.Compare(
+                        nearRelease.Substring(0, lengthToCompare),
+                        farRelease.Substring(0, lengthToCompare)) >= 0;
+                }
+            }
+
+            return nearVersion.MinVersion >= farVersion.MinVersion;
+        }
+
+        private static NuGetVersion GetReleaseLabelFreeVersion(VersionRange versionRange)
+        {
+            if (versionRange.Float.FloatBehavior == NuGetVersionFloatBehavior.Major)
+            {
+                return new NuGetVersion(int.MaxValue, int.MaxValue, int.MaxValue);
+            }
+            else if (versionRange.Float.FloatBehavior == NuGetVersionFloatBehavior.Minor)
+            {
+                return new NuGetVersion(versionRange.MinVersion.Major, int.MaxValue, int.MaxValue, int.MaxValue);
+            }
+            else if (versionRange.Float.FloatBehavior == NuGetVersionFloatBehavior.Patch)
+            {
+                return new NuGetVersion(versionRange.MinVersion.Major, versionRange.MinVersion.Minor, int.MaxValue, int.MaxValue);
+            }
+            else if (versionRange.Float.FloatBehavior == NuGetVersionFloatBehavior.Revision)
+            {
+                return new NuGetVersion(
+                    versionRange.MinVersion.Major,
+                    versionRange.MinVersion.Minor,
+                    versionRange.MinVersion.Patch,
+                    int.MaxValue);
+            }
+            else
+            {
+                return new NuGetVersion(
+                    versionRange.MinVersion.Major,
+                    versionRange.MinVersion.Minor,
+                    versionRange.MinVersion.Patch,
+                    versionRange.MinVersion.Revision);
+            }
+        }
+
+        private static void CollectLeafNodes(HashSet<GraphNode<RemoteResolveResult>> leafNodes,
+            GraphNode<RemoteResolveResult> node)
+        {
+            if (node.InnerNodes.Count == 0)
+                leafNodes.Add(node);
+        }
+
+        private static void CheckCycles(
+            this GraphNode<RemoteResolveResult> root,
+            List<GraphNode<RemoteResolveResult>> cycles)
+        {
+            root.ForEach((node, context) => WalkTreeCheckCycle(context, node), cycles);
         }
 
         private static void CheckCycleAndNearestWins(
@@ -76,6 +274,15 @@ namespace NuGet.DependencyResolver
             }
 
             ReleaseDowngradesDictionary(workingDowngrades);
+        }
+
+        private static void WalkTreeCheckCycle(List<GraphNode<RemoteResolveResult>> cycles,
+            GraphNode<RemoteResolveResult> node)
+        {
+            if (node.Disposition != Disposition.Cycle)
+                return;
+
+            cycles.Add(node);
         }
 
         private static void WalkTreeCheckCycleAndNearestWins(CyclesAndDowngrades context, GraphNode<RemoteResolveResult> node)
@@ -471,6 +678,7 @@ namespace NuGet.DependencyResolver
 
         private static bool WalkTreeRejectNodesOfRejectedNodes<TItem>(bool state, GraphNode<TItem> node, Tracker<TItem> context)
         {
+
             if (!state || node.Disposition == Disposition.Rejected)
             {
                 // Mark all nodes as rejected if they aren't already marked
