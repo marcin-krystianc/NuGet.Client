@@ -678,8 +678,7 @@ namespace NuGet.DependencyResolver
 
         private static bool WalkTreeRejectNodesOfRejectedNodes<TItem>(bool state, GraphNode<TItem> node, Tracker<TItem> context)
         {
-
-            if (!state || node.Disposition == Disposition.Rejected)
+            if (node.OuterNodes.Count > 0 && node.OuterNodes.All(x=>x.Disposition == Disposition.Rejected))
             {
                 // Mark all nodes as rejected if they aren't already marked
                 node.Disposition = Disposition.Rejected;
@@ -695,8 +694,7 @@ namespace NuGet.DependencyResolver
             var tracker = context.Tracker;
             var acceptedLibraries = context.AcceptedLibraries;
 
-            if (!state
-                || node.Disposition == Disposition.Rejected)
+            if (!state || node.OuterNodes.Count > 0 && node.OuterNodes.All(x => x.Disposition == Disposition.Rejected))
             {
                 return false;
             }
