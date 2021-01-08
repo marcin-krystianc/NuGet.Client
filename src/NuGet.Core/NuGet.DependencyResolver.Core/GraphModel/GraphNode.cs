@@ -17,7 +17,6 @@ namespace NuGet.DependencyResolver
             OuterNodes = new List<GraphNode<TItem>>();
             Disposition = Disposition.Acceptable;
             ParentNodes = new List<GraphNode<TItem>>();
-            TransitiveNodes = new List<GraphNode<TItem>>();
         }
 
         public LibraryRange Key { get; set; }
@@ -25,7 +24,6 @@ namespace NuGet.DependencyResolver
 
         public IList<GraphNode<TItem>> OuterNodes { get; }
         public IList<GraphNode<TItem>> InnerNodes { get; set; }
-        public IList<GraphNode<TItem>> TransitiveNodes { get; }
         public Disposition Disposition { get; set; }
 
         /// <summary>

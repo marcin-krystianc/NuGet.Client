@@ -16,28 +16,6 @@ namespace NuGet.DependencyResolver
     {
         private const string NodeArrow = " -> ";
 
-        private enum WalkState
-        {
-            Walking,
-            Rejected,
-            Ambiguous
-        }
-
-        public static AnalyzeResult<RemoteResolveResult> Analyze2(this GraphNode<RemoteResolveResult> root)
-        {
-            var result = new AnalyzeResult<RemoteResolveResult>();
-
-            //root.CheckCycleAndNearestWins(result.Downgrades, result.Cycles);
-            root.CheckCycles(result.Cycles);
-            root.FlattenTheGraph(result.Downgrades, result.VersionConflicts);
-            //root.TryResolveConflicts(result.VersionConflicts);
-
-            // Remove all downgrades that didn't result in selecting the node we actually downgraded to
-            // result.Downgrades.RemoveAll(d => d.DowngradedTo.Disposition != Disposition.Accepted);
-
-            return result;
-        }
-
         public static AnalyzeResult<RemoteResolveResult> Analyze(this GraphNode<RemoteResolveResult> root)
         {
             var result = new AnalyzeResult<RemoteResolveResult>();
@@ -49,73 +27,6 @@ namespace NuGet.DependencyResolver
             result.Downgrades.RemoveAll(d => d.DowngradedTo.Disposition != Disposition.Accepted);
 
             return result;
-        }
-
-        private static void FlattenTheGraph(this GraphNode<RemoteResolveResult> root,
-            List<DowngradeResult<RemoteResolveResult>> downgrades,
-            List<VersionConflictResult<RemoteResolveResult>> conflicts)
-        {
-            var processedNodes = new HashSet<GraphNode<RemoteResolveResult>>();
-            var nodesToProcess = new HashSet<GraphNode<RemoteResolveResult>>();
-            root.ForEach((node, context) => CollectLeafNodes(context, node), nodesToProcess);
-            for (;;)
-            {
-                var nodeToProcess = nodesToProcess.FirstOrDefault();
-                if (nodeToProcess == null)
-                    return;
-
-                nodesToProcess.Remove(nodeToProcess);
-                processedNodes.Add(nodeToProcess);
-
-                var transitiveNodesToPropagate = new List<GraphNode<RemoteResolveResult>>();
-                foreach (var transitiveNode in nodeToProcess.TransitiveNodes)
-                {
-                    var eclipsingInnerNode = nodeToProcess.InnerNodes.FirstOrDefault(x => transitiveNode.Key.IsEclipsedBy(x.Key));
-
-                    if (eclipsingInnerNode != null)
-                    {
-                        if (eclipsingInnerNode.Key.VersionRange != null &&
-                            transitiveNode.Key.VersionRange != null &&
-                            !IsGreaterThanOrEqualTo(eclipsingInnerNode.Key.VersionRange,
-                                transitiveNode.Key.VersionRange))
-                        {
-                            // downgrade
-                            downgrades.Add(new DowngradeResult<RemoteResolveResult>() {DowngradedFrom = transitiveNode, DowngradedTo = eclipsingInnerNode});
-                        }
-                    }
-                    else
-                    {
-                        transitiveNodesToPropagate.Add(transitiveNode);
-                    }
-                }
-
-                foreach (var outerNode in nodeToProcess.OuterNodes)
-                {
-                    if (!outerNode.InnerNodes.Except(processedNodes).Any())
-                    {
-                        nodesToProcess.Add(outerNode);
-                    }
-
-                    foreach (var transitiveNodeToPropagate in transitiveNodesToPropagate.Concat(nodeToProcess.InnerNodes))
-                    {
-                        var potentiallyConflictingTransitiveNode = outerNode.TransitiveNodes.FirstOrDefault(x =>
-                            transitiveNodeToPropagate.Key.IsEclipsedBy(x.Key));
-
-                        if (potentiallyConflictingTransitiveNode == null)
-                        {
-                            outerNode.TransitiveNodes.Add(transitiveNodeToPropagate);
-                        }
-                        else
-                        {
-                            var commonSubSet = VersionRange.CommonSubSet(new[] {potentiallyConflictingTransitiveNode.Key.VersionRange, transitiveNodeToPropagate.Key.VersionRange});
-                            if (commonSubSet.Equals(VersionRange.None))
-                            {
-                                conflicts.Add(new VersionConflictResult<RemoteResolveResult>(){Selected = potentiallyConflictingTransitiveNode, Conflicting = transitiveNodeToPropagate });
-                            }
-                        }
-                    }
-                }
-            }
         }
 
         // Verifies if minimum version specification for nearVersion is greater than the
