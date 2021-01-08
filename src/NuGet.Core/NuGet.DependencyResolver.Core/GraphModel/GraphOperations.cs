@@ -564,7 +564,10 @@ namespace NuGet.DependencyResolver
             while (incomplete && --patience != 0)
             {
                 // Create a picture of what has not been rejected yet
-                root.ForEach(true, (node, state, context) => WalkTreeRejectNodesOfRejectedNodes(state, node, context), tracker, skipNode);
+                foreach (var node in root.EnumerateAllInTopologicalOrder())
+                {
+                    WalkTreeRejectNodesOfRejectedNodes(node, tracker);
+                }
 
                 if (hasCentralTransitiveDependencies)
                 {
@@ -578,9 +581,12 @@ namespace NuGet.DependencyResolver
                     DetectAndMarkAmbiguousCentralTransitiveDependencies(tracker, centralTransitiveNodes);
                 }
 
-                root.ForEach(true, (node, state, context) => WalkTreeAcceptOrRejectNodes(context, state, node), CreateState(tracker, acceptedLibraries));
+                foreach (var node in root.EnumerateAllInTopologicalOrder())
+                {
+                    WalkTreeAcceptOrRejectNodes(CreateState(tracker, acceptedLibraries), node);
+                }
 
-                incomplete = root.ForEachGlobalState(false, (node, state) => state || node.Disposition == Disposition.Acceptable);
+                incomplete = root.EnumerateAll().Any(x => x.Disposition == Disposition.Acceptable);
 
                 tracker.Clear();
             }
@@ -641,25 +647,25 @@ namespace NuGet.DependencyResolver
             }
         }
 
-        private static bool WalkTreeRejectNodesOfRejectedNodes<TItem>(bool state, GraphNode<TItem> node, Tracker<TItem> context)
+        private static void WalkTreeRejectNodesOfRejectedNodes<TItem>(GraphNode<TItem> node, Tracker<TItem> context)
         {
             if (node.OuterNodes.Count > 0 && node.OuterNodes.All(x=>x.Disposition == Disposition.Rejected))
             {
                 // Mark all nodes as rejected if they aren't already marked
                 node.Disposition = Disposition.Rejected;
-                return false;
             }
-
-            context.Track(node.Item);
-            return true;
+            else
+            {
+                context.Track(node.Item);
+            }
         }
 
-        private static bool WalkTreeAcceptOrRejectNodes<TItem>(TrackerAndAccepted<TItem> context, bool state, GraphNode<TItem> node)
+        private static bool WalkTreeAcceptOrRejectNodes<TItem>(TrackerAndAccepted<TItem> context, GraphNode<TItem> node)
         {
             var tracker = context.Tracker;
             var acceptedLibraries = context.AcceptedLibraries;
 
-            if (!state || node.OuterNodes.Count > 0 && node.OuterNodes.All(x => x.Disposition == Disposition.Rejected))
+            if (node.OuterNodes.Count > 0 && node.OuterNodes.All(x => x.Disposition == Disposition.Rejected))
             {
                 return false;
             }
@@ -685,37 +691,15 @@ namespace NuGet.DependencyResolver
             return node.Disposition == Disposition.Accepted;
         }
 
-        private static TState ForEachGlobalState<TItem, TState>(this GraphNode<TItem> root, TState state, Func<GraphNode<TItem>, TState, TState> visitor, Func<GraphNode<TItem>, bool> skipNode = null)
-        {
-            var queue = Cache<TItem>.RentQueue();
-            // breadth-first walk of Node tree
-
-            queue.Enqueue(root);
-            while (queue.Count > 0)
-            {
-                var work = queue.Dequeue();
-                if (skipNode == null || !skipNode(work))
-                {
-                    state = visitor(work, state);
-
-                    AddInnerNodesToQueue(work.InnerNodes, queue);
-                }
-            }
-
-            Cache<TItem>.ReleaseQueue(queue);
-
-            return state;
-        }
-
         private static void ForEach<TItem, TState, TContext>(this GraphNode<TItem> root, TState state, Func<GraphNode<TItem>, TState, TContext, TState> visitor, TContext context, Func<GraphNode<TItem>, bool> skipNode = null)
         {
             var queue = Cache<TItem, TState>.RentQueue();
-
             // breadth-first walk of Node tree
             queue.Enqueue(NodeWithState.Create(root, state));
             while (queue.Count > 0)
             {
                 var work = queue.Dequeue();
+
                 if (skipNode == null || !skipNode(work.Node))
                 {
                     state = visitor(work.Node, work.State, context);
@@ -739,6 +723,7 @@ namespace NuGet.DependencyResolver
                 while (queue.Count > 0)
                 {
                     var node = queue.Dequeue();
+
                     visitor(node);
 
                     AddInnerNodesToQueue(node.InnerNodes, queue);
@@ -751,12 +736,14 @@ namespace NuGet.DependencyResolver
         private static void ForEach<TItem>(this GraphNode<TItem> root, Action<GraphNode<TItem>> visitor, Func<GraphNode<TItem>, bool> skipNode)
         {
             var queue = Cache<TItem>.RentQueue();
+            var visitedNodes = new HashSet<GraphNode<TItem>>();
 
             // breadth-first walk of Node tree, no state
             queue.Enqueue(root);
             while (queue.Count > 0)
             {
                 var node = queue.Dequeue();
+
                 if (skipNode == null || !skipNode(node))
                 {
                     visitor(node);
@@ -773,15 +760,60 @@ namespace NuGet.DependencyResolver
             ForEach(root, visitor, skipNode: null);
         }
 
-        private static void ForEach<TItem, TContext>(this GraphNode<TItem> root, Action<GraphNode<TItem>, TContext> visitor, TContext context, Func<GraphNode<TItem>, bool> skipNode)
+        private static IEnumerable<GraphNode<TItem>> EnumerateAll<TItem>(this GraphNode<TItem> root)
         {
             var queue = Cache<TItem>.RentQueue();
+            var visitedNodes = new HashSet<GraphNode<TItem>>();
 
+            // breadth-first walk of Node tree, visit each node only once
+            queue.Enqueue(root);
+            while (queue.Count > 0)
+            {
+                var node = queue.Dequeue();
+                if (!visitedNodes.Add(node))
+                    continue;
+
+                yield return node;
+                foreach (var innerNode in node.InnerNodes)
+                {
+                    queue.Enqueue(innerNode);
+                }
+            }
+
+            Cache<TItem>.ReleaseQueue(queue);
+        }
+
+        private static IEnumerable<GraphNode<TItem>> EnumerateAllInTopologicalOrder<TItem>(this GraphNode<TItem> root)
+        {
+            var inDegree = root.EnumerateAll()
+                .ToDictionary(x => x, x => x.OuterNodes.Count);
+
+            var queue = Cache<TItem>.RentQueue();
             // breadth-first walk of Node tree, no state
             queue.Enqueue(root);
             while (queue.Count > 0)
             {
                 var node = queue.Dequeue();
+                yield return node;
+                foreach (var innerNode in node.InnerNodes)
+                {
+                    if (--inDegree[innerNode] == 0)
+                    {
+                        queue.Enqueue(innerNode);
+                    }
+                }
+            }
+        }
+
+        private static void ForEach<TItem, TContext>(this GraphNode<TItem> root, Action<GraphNode<TItem>, TContext> visitor, TContext context, Func<GraphNode<TItem>, bool> skipNode)
+        {
+            var queue = Cache<TItem>.RentQueue();
+            // breadth-first walk of Node tree, no state
+            queue.Enqueue(root);
+            while (queue.Count > 0)
+            {
+                var node = queue.Dequeue();
+
                 if (skipNode == null || !skipNode(node))
                 {
                     visitor(node, context);
