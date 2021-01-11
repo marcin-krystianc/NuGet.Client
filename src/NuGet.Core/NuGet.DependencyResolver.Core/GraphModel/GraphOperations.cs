@@ -487,11 +487,6 @@ namespace NuGet.DependencyResolver
                     root.RejectCentralTransitiveBecauseOfRejectedParents(tracker, centralTransitiveNodes);
                 }
 
-                if (hasCentralTransitiveDependencies)
-                {
-                    DetectAndMarkAmbiguousCentralTransitiveDependencies(tracker, centralTransitiveNodes);
-                }
-
                 foreach (var node in root.EnumerateAllInTopologicalOrder())
                 {
                     WalkTreeAcceptOrRejectNodes(CreateState(tracker, acceptedLibraries), node);
@@ -576,12 +571,14 @@ namespace NuGet.DependencyResolver
             var tracker = context.Tracker;
             var acceptedLibraries = context.AcceptedLibraries;
 
-            if (node.OuterNodes.Count > 0 && node.OuterNodes.All(x => x.Disposition == Disposition.Rejected))
+            if (node.ParentNodes.Count > 0)
             {
-                return false;
+                if (node.ParentNodes.All(x => x.Disposition != Disposition.Accepted))
+                {
+                    return false;
+                }
             }
-
-            if (tracker.IsAmbiguous(node.Item))
+            else if (node.OuterNodes.Count > 0 && node.OuterNodes.All(x => x.Disposition == Disposition.Rejected))
             {
                 return false;
             }
@@ -946,26 +943,6 @@ namespace NuGet.DependencyResolver
             {
                 Cycles = cycles,
                 Downgrades = downgrades
-            };
-        }
-
-        private static void DetectAndMarkAmbiguousCentralTransitiveDependencies<TItem>(Tracker<TItem> tracker, List<GraphNode<TItem>> centralTransitiveNodes)
-        {
-            // if a central transitive node has all parents disputed or ambiguous mark it and its children ambiguous
-            int ctdCount = centralTransitiveNodes.Count;
-            for (int i = 0; i < ctdCount; i++)
-            {
-                if (centralTransitiveNodes[i].Disposition == Disposition.Acceptable)
-                {
-                    bool allParentsAreDisputedOrAmbiguous = !centralTransitiveNodes[i].ParentNodes
-                        .Any(p => p.Disposition != Disposition.Rejected && !(tracker.IsDisputed(p.Item) || tracker.IsAmbiguous(p.Item)));
-
-                    if (allParentsAreDisputedOrAmbiguous)
-                    {
-                        // children of ambiguous nodes were already marked as ambiguous, skip them
-                        centralTransitiveNodes[i].ForEach(x => tracker.MarkAmbiguous(x.Item), pn => tracker.IsAmbiguous(pn.Item));
-                    }
-                }
             };
         }
 

@@ -281,6 +281,11 @@ namespace NuGet.DependencyResolver.Tests
             Assert.Equal(0, result.VersionConflicts.Count);
         }
 
+        /// <summary>
+        ///   -> B 2.0.0 -> D 2.0.0 -> E [2.0.0]
+        /// A -> C 2.0.0 -> D 1.0.0 -> E [1.0.0]
+        ///   -> F 2.0.0 -> E [1.0.0]
+        /// </summary>
         [Fact]
         public async Task ConflictAtDifferentLevel()
         {
@@ -1816,7 +1821,7 @@ namespace NuGet.DependencyResolver.Tests
             while (node != null)
             {
                 matches.Insert(0, $"{node.Key.Name} {node.Item?.Key?.Version ?? node.Key.VersionRange.MinVersion}");
-                node = node.OuterNodes.FirstOrDefault();
+                node = node.OuterNodes.FirstOrDefault(x => x.Disposition == Disposition.Accepted);
             }
 
             Assert.Equal(items, matches);
