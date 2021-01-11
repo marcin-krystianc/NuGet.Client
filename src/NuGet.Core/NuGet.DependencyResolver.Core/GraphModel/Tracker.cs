@@ -6,7 +6,7 @@ using System.Collections.Generic;
 
 namespace NuGet.DependencyResolver
 {
-    public class Tracker<TItem>
+    internal class Tracker<TItem>
     {
         private readonly Dictionary<string, Entry> _entries
             = new Dictionary<string, Entry>(StringComparer.OrdinalIgnoreCase);
