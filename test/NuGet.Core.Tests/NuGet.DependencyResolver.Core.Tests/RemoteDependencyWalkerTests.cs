@@ -16,6 +16,11 @@ namespace NuGet.DependencyResolver.Tests
 {
     public class RemoteDependencyWalkerTests
     {
+        /// <summary>
+        ///             -> B 1.0      -> D 1.0
+        /// A 1.0-beta  -> C 1.0-beta -> D 1.1-beta
+        ///             -> E 1.0      -> D 0.1
+        /// </summary>
         [Fact]
         public async Task AllowPreleaseVersionNoConflict()
         {
@@ -44,6 +49,9 @@ namespace NuGet.DependencyResolver.Tests
             Assert.Equal(0, result.VersionConflicts.Count);
         }
 
+        /// <summary>
+        /// A 1.0 -> B 2.0 -> A 1.0
+        /// </summary>
         [Fact]
         public async Task CyclesAreDetected()
         {
@@ -68,6 +76,9 @@ namespace NuGet.DependencyResolver.Tests
             AssertPath(cycle, "A 1.0", "B 2.0", "A 1.0");
         }
 
+        /// <summary>
+        /// A 1.0 -> B 2.0 -> A 5.0
+        /// </summary>
         [Fact]
         public async Task CyclesAreDetectedIf2VersionsOfTheSamePackageId()
         {
@@ -92,6 +103,11 @@ namespace NuGet.DependencyResolver.Tests
             AssertPath(cycle, "A 1.0", "B 2.0", "A 5.0");
         }
 
+        /// <summary>
+        ///                         -> D 1.0
+        /// A 1.0 -> B 2.0 -> C 2.0
+        ///                         -> E 1.0 -> A 1.0
+        /// </summary>
         [Fact]
         public async Task DeepCycleCheck()
         {
@@ -124,6 +140,11 @@ namespace NuGet.DependencyResolver.Tests
             AssertPath(cycle, "A 1.0", "B 2.0", "C 2.0", "E 1.0", "A 1.0");
         }
 
+        /// <summary>
+        ///       -> B 2.0 -> D 2.0 -> E [2.0]
+        /// A 1.0
+        ///       -> C 2.0 -> D 1.0 -> E [1.0]
+        /// </summary>
         [Fact]
         public async Task DependencyRangesButNoConflict()
         {
@@ -157,6 +178,11 @@ namespace NuGet.DependencyResolver.Tests
             Assert.Equal(0, result.VersionConflicts.Count);
         }
 
+        /// <summary>
+        ///                 -> B 2.0 (project) -> D [2.0] (project)
+        /// A 1.0 (project)
+        ///                 -> C 2.0 (package) -> D [1.0] (package)
+        /// </summary>
         [Fact]
         public async Task AllowProjectOverridePackageNoConflict()
         {
@@ -187,6 +213,11 @@ namespace NuGet.DependencyResolver.Tests
             Assert.Equal(0, result.VersionConflicts.Count);
         }
 
+        /// <summary>
+        ///       -> B 2.0 -> D [2.0]
+        /// A 1.0
+        ///       -> C 2.0 -> D [1.0]
+        /// </summary>
         [Fact]
         public async Task SingleConflict()
         {
@@ -221,6 +252,11 @@ namespace NuGet.DependencyResolver.Tests
             AssertPath(c2, "A 1.0", "C 2.0", "D 1.0");
         }
 
+        /// <summary>
+        ///       -> B 2.0 -> D [2.0]
+        /// A 1.0
+        ///       -> C 2.0 -> D [1.0] (Unresolved but still conflicting)
+        /// </summary>
         [Fact]
         public async Task SingleConflictWhereConflictingDependenyIsUnresolved()
         {
@@ -254,6 +290,11 @@ namespace NuGet.DependencyResolver.Tests
             AssertPath(c2, "A 1.0", "C 2.0", "D 1.0");
         }
 
+        /// <summary>
+        ///       -> B 2.0 -> D [2.0]
+        /// A 1.0
+        ///       -> C 2.0 -> D [1.0, 3.0]
+        /// </summary>
         [Fact]
         public async Task StrictDependenciesButNoConflict()
         {
@@ -330,6 +371,11 @@ namespace NuGet.DependencyResolver.Tests
             AssertPath(c2, "A 1.0", "F 2.0", "E 1.0");
         }
 
+        /// <summary>
+        ///          -> A 1.0 -> C (1.0, 1.4]
+        /// Root 1.0
+        ///          -> B 2.0 -> C 1.8
+        /// </summary>
         [Fact]
         public async Task TryResolveConflicts_ThrowsIfPackageConstraintCannotBeResolved()
         {
@@ -364,6 +410,11 @@ namespace NuGet.DependencyResolver.Tests
             AssertPath(c2, "Root 1.0", "A 1.0", "C 1.3.8");
         }
 
+        /// <summary>
+        ///          -> A 1.0 -> C (Resolved as 2.0)
+        /// Root 1.0
+        ///          -> B 2.0 -> C 1.8
+        /// </summary>
         [Fact]
         public async Task TryResolveConflicts_WorksWhenVersionRangeIsNotSpecified()
         {
@@ -403,6 +454,11 @@ namespace NuGet.DependencyResolver.Tests
             Assert.Equal(Disposition.Rejected, node.Path("B", "C").Disposition);
         }
 
+        /// <summary>
+        ///       -> B 2.0 -> D [2.0]
+        /// A 1.0 -> C 2.0 -> D [1.0]
+        ///       -> D 3.0
+        /// </summary>
         [Fact]
         public async Task NearestWinsOverridesStrictDependency()
         {
@@ -433,6 +489,11 @@ namespace NuGet.DependencyResolver.Tests
             Assert.Equal(0, result.Downgrades.Count);
         }
 
+        /// <summary>
+        ///       -> B 2.0 -> D [2.0]
+        /// A 1.0 -> C 2.0 -> D [1.0]
+        ///       -> D 1.0
+        /// </summary>
         [Fact]
         public async Task NearestWinsOverridesStrictDependencyButDowngradeWarns()
         {
@@ -468,6 +529,11 @@ namespace NuGet.DependencyResolver.Tests
             AssertPath(downgradedBy, "A 1.0", "D 1.0");
         }
 
+        /// <summary>
+        ///       -> B 2.0 -> C 2.0
+        /// A 1.0
+        ///       -> C 2.0
+        /// </summary>
         [Fact]
         public async Task DowngradeSkippedIfEqual()
         {
@@ -491,6 +557,11 @@ namespace NuGet.DependencyResolver.Tests
             Assert.Equal(0, result.Downgrades.Count);
         }
 
+        /// <summary>
+        ///       -> B 2.0 -> C 2.0
+        /// A 1.0
+        ///       -> C 1.0
+        /// </summary>
         [Fact]
         public async Task DowngradeAtRootIsDetected()
         {
@@ -520,6 +591,11 @@ namespace NuGet.DependencyResolver.Tests
             AssertPath(downgradedBy, "A 1.0", "C 1.0");
         }
 
+        /// <summary>
+        ///                -> C 2.0 -> D 2.0
+        /// A 1.0 -> B 2.0
+        ///                -> D 1.0
+        /// </summary>
         [Fact]
         public async Task DowngradeNotAtRootIsDetected()
         {
@@ -551,6 +627,12 @@ namespace NuGet.DependencyResolver.Tests
             AssertPath(downgradedBy, "A 1.0", "B 2.0", "D 1.0");
         }
 
+        /// <summary>
+        ///                -> E 1.0 -> D 2.0
+        ///       -> B 1.0 -> D 1.0
+        /// A 1.0
+        ///       -> C 1.0 -> D 3.0
+        /// </summary>
         [Fact]
         public async Task DowngradeOverddienByCousinCheck()
         {
@@ -583,6 +665,12 @@ namespace NuGet.DependencyResolver.Tests
             Assert.Equal(0, result.Downgrades.Count);
         }
 
+        /// <summary>
+        ///       -> B 1.2
+        /// A 1.0
+        ///       -> C 1.0 -> B 0.8
+        ///                -> D 1.0 -> B 1.0
+        /// </summary>
         [Fact]
         public async Task PotentialDowngradeThenUpgrade()
         {
@@ -614,6 +702,12 @@ namespace NuGet.DependencyResolver.Tests
             Assert.Equal(0, result.Downgrades.Count);
         }
 
+        /// <summary>
+        ///       -> B 1.0
+        /// A 1.0
+        ///       -> C 1.0 -> B 2.0
+        ///                -> D 1.0 -> B 1.0
+        /// </summary>
         [Fact]
         public async Task DowngradeThenUpgradeThenDowngrade()
         {
@@ -648,6 +742,11 @@ namespace NuGet.DependencyResolver.Tests
             AssertPath(downgradedBy, "A 1.0", "B 1.0");
         }
 
+        /// <summary>
+        /// A 1.0 -> B 2.0
+        ///       -> C 1.0 -> B 1.0
+        ///                -> D 1.0 -> B 2.0
+        /// </summary>
         [Fact]
         public async Task UpgradeThenDowngradeThenEqual()
         {
@@ -677,6 +776,11 @@ namespace NuGet.DependencyResolver.Tests
             Assert.Equal(0, result.Downgrades.Count);
         }
 
+        /// <summary>
+        /// A 1.0 -> B 0.7
+        ///       -> C 1.0 -> B 0.8
+        ///                -> D 1.0 -> B 1.0
+        /// </summary>
         [Fact]
         public async Task DoubleDowngrade()
         {
@@ -703,13 +807,9 @@ namespace NuGet.DependencyResolver.Tests
             var walker = new RemoteDependencyWalker(context);
             var node = await DoWalkAsync(walker, "A");
 
-            var downgrades = new List<Tuple<GraphNode<RemoteResolveResult>, GraphNode<RemoteResolveResult>>>();
-            var cycles = new List<GraphNode<RemoteResolveResult>>();
-
             var result = node.Analyze();
 
             Assert.Equal(2, result.Downgrades.Count);
-
 
             var d0 = result.Downgrades[0];
             var d0To = d0.DowngradedFrom;
@@ -724,7 +824,6 @@ namespace NuGet.DependencyResolver.Tests
 
             AssertPath(d1To, "A 1.0", "C 1.0", "D 1.0", "B 1.0");
             AssertPath(d1By, "A 1.0", "B 0.7");
-
         }
 
         [Fact]
@@ -884,7 +983,6 @@ namespace NuGet.DependencyResolver.Tests
         [Theory]
         [InlineData("2.0.0", "2.0.0")]
         [InlineData("2.0.0", "1.0.0")]
-
         public async Task WalkAsyncAddsTransitiveCentralDependency(string centralPackageVersion, string otherVersion)
         {
             var centralPackageName = "D";
