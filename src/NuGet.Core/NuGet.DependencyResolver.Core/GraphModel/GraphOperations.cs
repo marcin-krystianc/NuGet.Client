@@ -463,10 +463,6 @@ namespace NuGet.DependencyResolver
             var incomplete = true;
 
             var tracker = Cache<TItem>.RentTracker();
-            foreach (var node in root.EnumerateAll())
-            {
-                tracker.Track(node.Item);
-            }
 
             var centralTransitiveNodes = root.InnerNodes.Where(n => n.Item.IsCentralTransitive).ToList();
             var hasCentralTransitiveDependencies = centralTransitiveNodes.Count > 0;
@@ -486,12 +482,19 @@ namespace NuGet.DependencyResolver
                     root.RejectCentralTransitiveBecauseOfRejectedParents(tracker, centralTransitiveNodes);
                 }
 
+                foreach (var node in root.EnumerateAll().Where(x => x.Disposition != Disposition.Rejected))
+                {
+                    tracker.Track(node.Item);
+                }
+
                 foreach (var node in root.EnumerateAllInTopologicalOrder())
                 {
                     WalkTreeAcceptOrRejectNodes(node, CreateState(tracker, acceptedLibraries));
                 }
 
                 incomplete = root.EnumerateAll().Any(x => x.Disposition == Disposition.Acceptable);
+
+                tracker.Clear();
             }
 
             Cache<TItem>.ReleaseTracker(tracker);
