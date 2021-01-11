@@ -1,6 +1,6 @@
 <Project>
 	<PropertyGroup>
-		<SkipSigning>true</SkipSigning>
+		<SkipSigning>false</SkipSigning>
 		<SkipILMergeOfNuGetExe>true</SkipILMergeOfNuGetExe>
 		<UsePublicApiAnalyzer>false</UsePublicApiAnalyzer>
 	</PropertyGroup>

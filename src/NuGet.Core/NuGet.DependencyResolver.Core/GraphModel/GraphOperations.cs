@@ -482,9 +482,14 @@ namespace NuGet.DependencyResolver
                     root.RejectCentralTransitiveBecauseOfRejectedParents(tracker, centralTransitiveNodes);
                 }
 
+                foreach (var node in root.EnumerateAll().Where(x => x.Disposition != Disposition.Rejected))
+                {
+                    tracker.Track(node.Item);
+                }
+
                 foreach (var node in root.EnumerateAllInTopologicalOrder())
                 {
-                    WalkTreeAcceptOrRejectNodes(CreateState(tracker, acceptedLibraries), node);
+                    WalkTreeAcceptOrRejectNodes(node, CreateState(tracker, acceptedLibraries));
                 }
 
                 incomplete = root.EnumerateAll().Any(x => x.Disposition == Disposition.Acceptable);
@@ -555,13 +560,9 @@ namespace NuGet.DependencyResolver
                 // Mark all nodes as rejected if they aren't already marked
                 node.Disposition = Disposition.Rejected;
             }
-            else if (node.Disposition != Disposition.Rejected)
-            {
-                context.Track(node.Item);
-            }
         }
 
-        private static bool WalkTreeAcceptOrRejectNodes<TItem>(TrackerAndAccepted<TItem> context, GraphNode<TItem> node)
+        private static bool WalkTreeAcceptOrRejectNodes<TItem>(GraphNode<TItem> node, TrackerAndAccepted<TItem> context)
         {
             var tracker = context.Tracker;
             var acceptedLibraries = context.AcceptedLibraries;
