@@ -2017,10 +2017,10 @@ namespace NuGet.DependencyResolver.Tests
         }
 
         /// <summary>
-        ///       -> B 1.0 -> C 2.0
-        /// A 1.0
-        ///       -> D 1.0 -> C 1.0
         ///                -> B 1.0 -> C 2.0
+        ///       -> D 1.0 -> C 1.0
+        /// A 1.0
+        ///       -> E 1.0 -> B 1.0 -> C 2.0
         /// </summary>
         [Fact]
         public async Task TmpMy4()
@@ -2028,8 +2028,11 @@ namespace NuGet.DependencyResolver.Tests
             var context = new TestRemoteWalkContext();
             var provider = new DependencyProvider();
             provider.Package("A", "1.0")
-                .DependsOn("B", "1.0")
-                .DependsOn("D", "1.0");
+                .DependsOn("D", "1.0")
+                .DependsOn("E", "1.0");
+
+            provider.Package("E", "1.0")
+                .DependsOn("B", "1.0");
 
             provider.Package("B", "1.0")
                 .DependsOn("C", "2.0");

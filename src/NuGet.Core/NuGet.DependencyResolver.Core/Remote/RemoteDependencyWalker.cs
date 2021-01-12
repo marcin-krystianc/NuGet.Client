@@ -206,6 +206,8 @@ namespace NuGet.DependencyResolver
                                 transitiveCentralPackageVersions,
                                 graphNodesCache)));
 
+                        // disable concurrency
+                        await nodeTask.Value;
                         tasks.Add(nodeTask.Value);
 /*
                         var nodeTask = CreateGraphNode(
