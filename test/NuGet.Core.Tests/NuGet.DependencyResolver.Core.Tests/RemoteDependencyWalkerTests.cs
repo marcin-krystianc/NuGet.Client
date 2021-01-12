@@ -1979,6 +1979,79 @@ namespace NuGet.DependencyResolver.Tests
             Assert.Equal(0, result.VersionConflicts.Count);
         }
 
+        /// <summary>
+        ///       -> B 1.0 -> D 1.0 (acceptable) -> E 2.0 (acceptable)
+        /// A 1.0
+        ///       -> C 1.0 -> E 1.0 (acceptable) -> D 2.0 (acceptable)
+        /// </summary>
+        [Fact]
+        public async Task TmpMy3()
+        {
+            var context = new TestRemoteWalkContext();
+            var provider = new DependencyProvider();
+            provider.Package("A", "1.0")
+                .DependsOn("B", "1.0")
+                .DependsOn("C", "1.0");
+
+            provider.Package("B", "1.0")
+                .DependsOn("D", "1.0");
+
+            provider.Package("D", "1.0")
+                .DependsOn("E", "2.0");
+
+            provider.Package("C", "1.0")
+                .DependsOn("E", "1.0");
+
+            provider.Package("E", "1.0")
+                .DependsOn("D", "2.0");
+
+            context.LocalLibraryProviders.Add(provider);
+            var walker = new RemoteDependencyWalker(context);
+            var node = await DoWalkAsync(walker, "A");
+
+            var result = node.Analyze();
+
+            Assert.Equal(0, result.VersionConflicts.Count);
+            Assert.Equal(0, result.Downgrades.Count);
+            Assert.Equal(0, result.Cycles.Count);
+        }
+
+        /// <summary>
+        ///       -> B 1.0 -> C 2.0
+        /// A 1.0
+        ///       -> D 1.0 -> C 1.0
+        ///                -> B 1.0 -> C 2.0
+        /// </summary>
+        [Fact]
+        public async Task TmpMy4()
+        {
+            var context = new TestRemoteWalkContext();
+            var provider = new DependencyProvider();
+            provider.Package("A", "1.0")
+                .DependsOn("B", "1.0")
+                .DependsOn("D", "1.0");
+
+            provider.Package("B", "1.0")
+                .DependsOn("C", "2.0");
+
+            provider.Package("D", "1.0")
+                .DependsOn("C", "1.0")
+                .DependsOn("B", "1.0");
+
+            provider.Package("C", "1.0");
+            provider.Package("C", "2.0");
+
+            context.LocalLibraryProviders.Add(provider);
+            var walker = new RemoteDependencyWalker(context);
+            var node = await DoWalkAsync(walker, "A");
+
+            var result = node.Analyze();
+
+            Assert.Equal(0, result.VersionConflicts.Count);
+            Assert.Equal(0, result.Downgrades.Count);
+            Assert.Equal(0, result.Cycles.Count);
+        }
+
         private void AssertPath<TItem>(GraphNode<TItem> node, params string[] items)
         {
             var matches = new List<string>();
