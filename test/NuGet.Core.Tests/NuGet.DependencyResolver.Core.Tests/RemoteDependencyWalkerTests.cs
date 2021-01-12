@@ -1912,6 +1912,73 @@ namespace NuGet.DependencyResolver.Tests
             }
         }
 
+        /// <summary>
+        ///                -> D 1.0
+        ///       -> B 1.0          -> F 1.0
+        ///                -> E 1.0
+        /// A 1.0
+        ///       -> C 1.0 -> E 2.0
+        /// </summary>
+        [Fact]
+        public async Task TmpMy1()
+        {
+            var context = new TestRemoteWalkContext();
+            var provider = new DependencyProvider();
+            provider.Package("A", "1.0")
+                .DependsOn("B", "1.0")
+                .DependsOn("C", "1.0");
+
+            provider.Package("B", "1.0")
+                .DependsOn("D", "1.0")
+                .DependsOn("E", "1.0");
+
+            provider.Package("D", "1.0")
+                .DependsOn("F", "1.0");
+
+            provider.Package("E", "1.0")
+                .DependsOn("F", "1.0");
+
+            provider.Package("C", "1.0")
+                .DependsOn("E", "2.0");
+
+            context.LocalLibraryProviders.Add(provider);
+            var walker = new RemoteDependencyWalker(context);
+            var node = await DoWalkAsync(walker, "A");
+
+            var result = node.Analyze();
+
+            Assert.Equal(0, result.VersionConflicts.Count);
+        }
+
+        /// <summary>
+        ///       -> B 1.0 -> C 2.0
+        /// A 1.0
+        ///       -> C 1.0 -> B 2.0
+        /// </summary>
+        [Fact]
+        public async Task TmpMy2()
+        {
+            var context = new TestRemoteWalkContext();
+            var provider = new DependencyProvider();
+            provider.Package("A", "1.0")
+                .DependsOn("B", "1.0")
+                .DependsOn("C", "1.0");
+
+            provider.Package("B", "1.0")
+                .DependsOn("C", "2.0");
+
+            provider.Package("C", "1.0")
+                .DependsOn("B", "2.0");
+
+            context.LocalLibraryProviders.Add(provider);
+            var walker = new RemoteDependencyWalker(context);
+            var node = await DoWalkAsync(walker, "A");
+
+            var result = node.Analyze();
+
+            Assert.Equal(0, result.VersionConflicts.Count);
+        }
+
         private void AssertPath<TItem>(GraphNode<TItem> node, params string[] items)
         {
             var matches = new List<string>();

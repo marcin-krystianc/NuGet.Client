@@ -26,6 +26,9 @@ namespace NuGet.DependencyResolver
             // Remove all downgrades that didn't result in selecting the node we actually downgraded to
             result.Downgrades.RemoveAll(d => d.DowngradedTo.Disposition != Disposition.Accepted);
 
+            if (root.EnumerateAll().FirstOrDefault(x => x.Disposition == Disposition.Acceptable) != null)
+                throw new Exception();
+
             return result;
         }
 
@@ -567,14 +570,11 @@ namespace NuGet.DependencyResolver
             var tracker = context.Tracker;
             var acceptedLibraries = context.AcceptedLibraries;
 
-            if (node.ParentNodes.Count > 0)
+            if (node.ParentNodes.Count > 0 && node.ParentNodes.All(x => x.Disposition != Disposition.Accepted))
             {
-                if (node.ParentNodes.All(x => x.Disposition != Disposition.Accepted))
-                {
-                    return false;
-                }
+                return false;
             }
-            else if (node.OuterNodes.Count > 0 && node.OuterNodes.All(x => x.Disposition == Disposition.Rejected))
+            else if (node.OuterNodes.Count > 0 && node.OuterNodes.All(x => x.Disposition != Disposition.Accepted))
             {
                 return false;
             }
