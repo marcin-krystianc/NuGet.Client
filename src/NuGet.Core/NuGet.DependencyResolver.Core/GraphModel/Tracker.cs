@@ -6,7 +6,7 @@ using System.Collections.Generic;
 
 namespace NuGet.DependencyResolver
 {
-    public class Tracker<TItem>
+    internal class Tracker<TItem>
     {
         private readonly Dictionary<string, Entry> _entries
             = new Dictionary<string, Entry>(StringComparer.OrdinalIgnoreCase);
@@ -18,21 +18,6 @@ namespace NuGet.DependencyResolver
             {
                 entry.List.Add(item);
             }
-        }
-
-        public bool IsDisputed(GraphItem<TItem> item)
-        {
-            return GetEntry(item).List.Count > 1;
-        }
-
-        public bool IsAmbiguous(GraphItem<TItem> item)
-        {
-            return GetEntry(item).Ambiguous;
-        }
-
-        public void MarkAmbiguous(GraphItem<TItem> item)
-        {
-            GetEntry(item).Ambiguous = true;
         }
 
         public bool IsBestVersion(GraphItem<TItem> item)
@@ -51,8 +36,6 @@ namespace NuGet.DependencyResolver
 
             return true;
         }
-
-        public IEnumerable<GraphItem<TItem>> GetDisputes(GraphItem<TItem> item) => GetEntry(item).List;
 
         internal void Clear()
         {
@@ -78,8 +61,6 @@ namespace NuGet.DependencyResolver
             }
 
             public HashSet<GraphItem<TItem>> List { get; set; }
-
-            public bool Ambiguous { get; set; }
         }
     }
 }

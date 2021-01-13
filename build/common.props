@@ -2,6 +2,7 @@
 <Project ToolsVersion="15.0">
   <PropertyGroup>
     <IsNetCoreProject>true</IsNetCoreProject>
+	<UsePublicApiAnalyzer>false</UsePublicApiAnalyzer>
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(IsNetCoreProject)' == 'true' AND '$(Shipping)' == 'true' AND '$(IsXPlat)' != 'true'">

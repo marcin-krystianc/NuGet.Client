@@ -29,6 +29,8 @@ namespace NuGet.DependencyResolver
         public async Task<GraphNode<RemoteResolveResult>> WalkAsync(LibraryRange library, NuGetFramework framework, string runtimeIdentifier, RuntimeGraph runtimeGraph, bool recursive)
         {
             var transitiveCentralPackageVersions = new TransitiveCentralPackageVersions();
+            var graphNodesCache =
+                new ConcurrentDictionary<LibraryRange, Lazy<Task<GraphNode<RemoteResolveResult>>>>();
             var rootNode = await CreateGraphNode(
                 libraryRange: library,
                 framework: framework,
@@ -36,7 +38,8 @@ namespace NuGet.DependencyResolver
                 runtimeGraph: runtimeGraph,
                 predicate: _ => (recursive ? DependencyResult.Acceptable : DependencyResult.Eclipsed, null),
                 outerEdge: null,
-                transitiveCentralPackageVersions: transitiveCentralPackageVersions);
+                transitiveCentralPackageVersions: transitiveCentralPackageVersions,
+                graphNodesCache);
 
             // do not calculate the hashset of the direct dependencies for cases when there are not any elements in the transitiveCentralPackageVersions queue
             var indexedDirectDependenciesKeyNames = new Lazy<HashSet<string>>(
@@ -56,10 +59,14 @@ namespace NuGet.DependencyResolver
                     // as the nodes are created more parents can be added for a single central transitive node
                     // keep the list of the nodes created and add the parents's references at the end
                     // the parent references are needed to keep track of possible rejected parents
-                    transitiveCentralPackageVersionNodes.Add(await AddTransitiveCentralPackageVersionNodesAsync(rootNode, centralPackageVersionDependency, framework, runtimeIdentifier, runtimeGraph, transitiveCentralPackageVersions));
+                    transitiveCentralPackageVersionNodes.Add(await AddTransitiveCentralPackageVersionNodesAsync(
+                        rootNode, centralPackageVersionDependency, framework, runtimeIdentifier, runtimeGraph,
+                        transitiveCentralPackageVersions, graphNodesCache));
                 }
             }
-            transitiveCentralPackageVersionNodes.ForEach(node => transitiveCentralPackageVersions.AddParentsToNode(node));
+
+            transitiveCentralPackageVersionNodes.ForEach(node =>
+                transitiveCentralPackageVersions.AddParentsToNode(node));
 
             return rootNode;
         }
@@ -71,7 +78,8 @@ namespace NuGet.DependencyResolver
             RuntimeGraph runtimeGraph,
             Func<LibraryRange, (DependencyResult dependencyResult, LibraryDependency conflictingDependency)> predicate,
             GraphEdge<RemoteResolveResult> outerEdge,
-            TransitiveCentralPackageVersions transitiveCentralPackageVersions)
+            TransitiveCentralPackageVersions transitiveCentralPackageVersions,
+            ConcurrentDictionary<LibraryRange, Lazy<Task<GraphNode<RemoteResolveResult>>>> graphNodesCache)
         {
             List<LibraryDependency> dependencies = null;
             HashSet<string> runtimeDependencies = null;
@@ -187,14 +195,32 @@ namespace NuGet.DependencyResolver
                             tasks = new List<Task<GraphNode<RemoteResolveResult>>>(1);
                         }
 
-                        tasks.Add(CreateGraphNode(
-                            dependency.LibraryRange,
-                            framework,
-                            runtimeName,
-                            runtimeGraph,
-                            ChainPredicate(predicate, node, dependency),
-                            innerEdge,
-                            transitiveCentralPackageVersions));
+                        var nodeTask = graphNodesCache.GetOrAdd(dependency.LibraryRange, _ =>
+                            new Lazy<Task<GraphNode<RemoteResolveResult>>>(() => CreateGraphNode(
+                                dependency.LibraryRange,
+                                framework,
+                                runtimeName,
+                                runtimeGraph,
+                                ChainPredicate(predicate, node, dependency),
+                                innerEdge,
+                                transitiveCentralPackageVersions,
+                                graphNodesCache)));
+
+                        // disable concurrency
+                        await nodeTask.Value;
+                        tasks.Add(nodeTask.Value);
+/*
+                        var nodeTask = CreateGraphNode(
+                                dependency.LibraryRange,
+                                framework,
+                                runtimeName,
+                                runtimeGraph,
+                                ChainPredicate(predicate, node, dependency),
+                                innerEdge,
+                                transitiveCentralPackageVersions,
+                                graphNodesCache);
+                        tasks.Add(nodeTask);
+*/
                     }
                     else
                     {
@@ -213,10 +239,18 @@ namespace NuGet.DependencyResolver
                         {
                             var dependencyNode = new GraphNode<RemoteResolveResult>(dependency.LibraryRange)
                             {
-                                Disposition = result.dependencyResult == DependencyResult.Cycle ? Disposition.Cycle : Disposition.PotentiallyDowngraded
+                                Disposition = result.dependencyResult == DependencyResult.Cycle ? Disposition.Cycle : Disposition.PotentiallyDowngraded,
+                                // Resolve the dependency from the cache or sources
+                                Item = await ResolverUtility.FindLibraryCachedAsync(
+                                    _context.FindLibraryEntryCache,
+                                    dependency.LibraryRange,
+                                    framework,
+                                    runtimeName,
+                                    _context,
+                                    CancellationToken.None)
                             };
 
-                            dependencyNode.OuterNode = node;
+                            dependencyNode.OuterNodes.Add(node);
                             node.InnerNodes.Add(dependencyNode);
                         }
                     }
@@ -231,7 +265,7 @@ namespace NuGet.DependencyResolver
                 // Extract the resolved node
                 tasks.Remove(task);
                 var dependencyNode = await task;
-                dependencyNode.OuterNode = node;
+                dependencyNode.OuterNodes.Add(node);
 
                 node.InnerNodes.Add(dependencyNode);
             }
@@ -412,7 +446,8 @@ namespace NuGet.DependencyResolver
             NuGetFramework framework,
             string runtimeIdentifier,
             RuntimeGraph runtimeGraph,
-            TransitiveCentralPackageVersions transitiveCentralPackageVersions)
+            TransitiveCentralPackageVersions transitiveCentralPackageVersions,
+            ConcurrentDictionary<LibraryRange, Lazy<Task<GraphNode<RemoteResolveResult>>>> graphNodesCache)
         {
             GraphNode<RemoteResolveResult> node = await CreateGraphNode(
                     libraryRange: centralPackageVersionDependency.LibraryRange,
@@ -421,9 +456,10 @@ namespace NuGet.DependencyResolver
                     runtimeGraph: runtimeGraph,
                     predicate: ChainPredicate(_ => (DependencyResult.Acceptable, null), rootNode, centralPackageVersionDependency),
                     outerEdge: null,
-                    transitiveCentralPackageVersions: transitiveCentralPackageVersions);
+                    transitiveCentralPackageVersions: transitiveCentralPackageVersions,
+                    graphNodesCache);
 
-            node.OuterNode = rootNode;
+            node.OuterNodes.Add(rootNode);
             node.Item.IsCentralTransitive = true;
             rootNode.InnerNodes.Add(node);
 
