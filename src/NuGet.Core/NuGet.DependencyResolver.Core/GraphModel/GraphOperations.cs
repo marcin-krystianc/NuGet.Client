@@ -234,6 +234,8 @@ namespace NuGet.DependencyResolver
                 return;
             }
 
+
+
             // REVIEW: This could probably be done in a single pass where we keep track
             // of what is nearer as we walk down the graph (BFS)
             for (var n = node.OuterNodes.FirstOrDefault(); n != null; n = n.OuterNodes.FirstOrDefault())
@@ -718,35 +720,6 @@ namespace NuGet.DependencyResolver
             }
         }
 
-        private static class Cache<TItem, TState>
-        {
-            [ThreadStatic]
-            private static Queue<NodeWithState<TItem, TState>> _queue;
-
-
-            public static Queue<NodeWithState<TItem, TState>> RentQueue()
-            {
-                var queue = _queue;
-                if (queue != null)
-                {
-                    _queue = null;
-                    return queue;
-                }
-
-                return new Queue<NodeWithState<TItem, TState>>();
-            }
-
-            public static void ReleaseQueue(Queue<NodeWithState<TItem, TState>> queue)
-            {
-                if (_queue == null)
-                {
-                    queue.Clear();
-                    _queue = queue;
-                }
-            }
-
-        }
-
         private static class Cache<TItem>
         {
             [ThreadStatic]
@@ -817,24 +790,6 @@ namespace NuGet.DependencyResolver
                     dictionary.Clear();
                     _dictionary = dictionary;
                 }
-            }
-        }
-
-        private struct NodeWithState<TItem, TState>
-        {
-            public GraphNode<TItem> Node;
-            public TState State;
-        }
-
-        private static class NodeWithState
-        {
-            public static NodeWithState<TItem, TState> Create<TItem, TState>(GraphNode<TItem> node, TState state)
-            {
-                return new NodeWithState<TItem, TState>
-                {
-                    Node = node,
-                    State = state
-                };
             }
         }
 
