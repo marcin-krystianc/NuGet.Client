@@ -2025,34 +2025,37 @@ namespace NuGet.DependencyResolver.Tests
         [Fact]
         public async Task TmpMy4()
         {
-            var context = new TestRemoteWalkContext();
-            var provider = new DependencyProvider();
-            provider.Package("A", "1.0")
-                .DependsOn("D", "1.0")
-                .DependsOn("E", "1.0");
+            for (int i = 0; i < 1000000; i++)
+            {
+                var context = new TestRemoteWalkContext();
+                var provider = new DependencyProvider();
+                provider.Package("A", "1.0")
+                    .DependsOn("D", "1.0")
+                    .DependsOn("E", "1.0");
 
-            provider.Package("E", "1.0")
-                .DependsOn("B", "1.0");
+                provider.Package("E", "1.0")
+                    .DependsOn("B", "1.0");
 
-            provider.Package("B", "1.0")
-                .DependsOn("C", "2.0");
+                provider.Package("B", "1.0")
+                    .DependsOn("C", "2.0");
 
-            provider.Package("D", "1.0")
-                .DependsOn("C", "1.0")
-                .DependsOn("B", "1.0");
+                provider.Package("D", "1.0")
+                    .DependsOn("C", "1.0")
+                    .DependsOn("B", "1.0");
 
-            provider.Package("C", "1.0");
-            provider.Package("C", "2.0");
+                provider.Package("C", "1.0");
+                provider.Package("C", "2.0");
 
-            context.LocalLibraryProviders.Add(provider);
-            var walker = new RemoteDependencyWalker(context);
-            var node = await DoWalkAsync(walker, "A");
+                context.LocalLibraryProviders.Add(provider);
+                var walker = new RemoteDependencyWalker(context);
+                var node = await DoWalkAsync(walker, "A");
 
-            var result = node.Analyze();
+                var result = node.Analyze();
 
-            Assert.Equal(0, result.VersionConflicts.Count);
-            Assert.Equal(0, result.Downgrades.Count);
-            Assert.Equal(0, result.Cycles.Count);
+                Assert.Equal(0, result.VersionConflicts.Count);
+                Assert.Equal(0, result.Downgrades.Count);
+                Assert.Equal(0, result.Cycles.Count);
+            }
         }
 
         private void AssertPath<TItem>(GraphNode<TItem> node, params string[] items)

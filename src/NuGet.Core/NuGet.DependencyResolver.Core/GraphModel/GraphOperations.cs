@@ -147,20 +147,6 @@ namespace NuGet.DependencyResolver
             }
         }
 
-        private static void CollectLeafNodes(HashSet<GraphNode<RemoteResolveResult>> leafNodes,
-            GraphNode<RemoteResolveResult> node)
-        {
-            if (node.InnerNodes.Count == 0)
-                leafNodes.Add(node);
-        }
-
-        private static void CheckCycles(
-            this GraphNode<RemoteResolveResult> root,
-            List<GraphNode<RemoteResolveResult>> cycles)
-        {
-            root.ForEach((node, context) => WalkTreeCheckCycle(context, node), cycles);
-        }
-
         private static void CheckCycleAndNearestWins(
             this GraphNode<RemoteResolveResult> root,
             List<DowngradeResult<RemoteResolveResult>> downgrades,
@@ -168,7 +154,10 @@ namespace NuGet.DependencyResolver
         {
             var workingDowngrades = RentDowngradesDictionary();
 
-            root.ForEach((node, context) => WalkTreeCheckCycleAndNearestWins(context, node), CreateState(cycles, workingDowngrades));
+            foreach (var node in root.EnumerateAll())
+            {
+                WalkTreeCheckCycleAndNearestWins(CreateState(cycles, workingDowngrades), node);
+            }
 
 #if IS_DESKTOP || NETSTANDARD2_0
             // Increase List size for items to be added, if too small
@@ -891,23 +880,15 @@ namespace NuGet.DependencyResolver
                 {
                     if (centralTransitiveNodes[i].Disposition == Disposition.Acceptable && centralTransitiveNodes[i].AreAllParentsRejected())
                     {
-                        centralTransitiveNodes[i].ForEach(n => n.Disposition = Disposition.Rejected);
+                        foreach (var node in centralTransitiveNodes[i].EnumerateAll())
+                        {
+                            node.Disposition = Disposition.Rejected;
+                        }
+
                         pendingRejections = true;
                     }
                 }
             }
-        }
-
-        private static bool WalkTreeRejectNodesOfRejectedNodes<TItem>(bool state, GraphNode<TItem> node, HashSet<GraphNode<TItem>> context)
-        {
-            if (!state || node.Disposition == Disposition.Rejected)
-            {
-                // Mark all nodes as rejected if they aren't already marked
-                node.Disposition = Disposition.Rejected;
-                return false;
-            }
-            context.Add(node);
-            return true;
         }
 
         // Box Drawing Unicode characters:
