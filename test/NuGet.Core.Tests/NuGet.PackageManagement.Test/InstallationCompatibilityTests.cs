@@ -343,7 +343,7 @@ namespace NuGet.PackageManagement.Test
                         }
                     };
 
-                    dependencyNode.OuterNodes.Add(node);
+                    dependencyNode.OuterNode = node;
                     node.InnerNodes.Add(dependencyNode);
                 }
 

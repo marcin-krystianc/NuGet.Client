@@ -16,6 +16,13 @@ namespace NuGet.DependencyResolver
     {
         private const string NodeArrow = " -> ";
 
+        private enum WalkState
+        {
+            Walking,
+            Rejected,
+            Ambiguous
+        }
+
         public static AnalyzeResult<RemoteResolveResult> Analyze(this GraphNode<RemoteResolveResult> root)
         {
             var result = new AnalyzeResult<RemoteResolveResult>();
@@ -29,121 +36,6 @@ namespace NuGet.DependencyResolver
             return result;
         }
 
-        // Verifies if minimum version specification for nearVersion is greater than the
-        // minimum version specification for farVersion
-        public static bool IsGreaterThanOrEqualTo(VersionRange nearVersion, VersionRange farVersion)
-        {
-            if (!nearVersion.HasLowerBound)
-            {
-                return true;
-            }
-            else if (!farVersion.HasLowerBound)
-            {
-                return false;
-            }
-            else if (nearVersion.IsFloating || farVersion.IsFloating)
-            {
-                NuGetVersion nearMinVersion;
-                NuGetVersion farMinVersion;
-
-                string nearRelease;
-                string farRelease;
-
-                if (nearVersion.IsFloating)
-                {
-                    if (nearVersion.Float.FloatBehavior == NuGetVersionFloatBehavior.Major)
-                    {
-                        // nearVersion: "*"
-                        return true;
-                    }
-
-                    nearMinVersion = GetReleaseLabelFreeVersion(nearVersion);
-                    nearRelease = nearVersion.Float.OriginalReleasePrefix;
-                }
-                else
-                {
-                    nearMinVersion = nearVersion.MinVersion;
-                    nearRelease = nearVersion.MinVersion.Release;
-                }
-
-                if (farVersion.IsFloating)
-                {
-                    if (farVersion.Float.FloatBehavior == NuGetVersionFloatBehavior.Major)
-                    {
-                        // farVersion: "*"
-                        return false;
-                    }
-
-                    farMinVersion = GetReleaseLabelFreeVersion(farVersion);
-                    farRelease = farVersion.Float.OriginalReleasePrefix;
-                }
-                else
-                {
-                    farMinVersion = farVersion.MinVersion;
-                    farRelease = farVersion.MinVersion.Release;
-                }
-
-                var result = nearMinVersion.CompareTo(farMinVersion, VersionComparison.Version);
-                if (result != 0)
-                {
-                    return result > 0;
-                }
-
-                if (string.IsNullOrEmpty(nearRelease))
-                {
-                    // near is 1.0.0-*
-                    return true;
-                }
-                else if (string.IsNullOrEmpty(farRelease))
-                {
-                    // near is 1.0.0-alpha-* and far is 1.0.0-*
-                    return false;
-                }
-                else
-                {
-                    var lengthToCompare = Math.Min(nearRelease.Length, farRelease.Length);
-
-                    return StringComparer.OrdinalIgnoreCase.Compare(
-                        nearRelease.Substring(0, lengthToCompare),
-                        farRelease.Substring(0, lengthToCompare)) >= 0;
-                }
-            }
-
-            return nearVersion.MinVersion >= farVersion.MinVersion;
-        }
-
-        private static NuGetVersion GetReleaseLabelFreeVersion(VersionRange versionRange)
-        {
-            if (versionRange.Float.FloatBehavior == NuGetVersionFloatBehavior.Major)
-            {
-                return new NuGetVersion(int.MaxValue, int.MaxValue, int.MaxValue);
-            }
-            else if (versionRange.Float.FloatBehavior == NuGetVersionFloatBehavior.Minor)
-            {
-                return new NuGetVersion(versionRange.MinVersion.Major, int.MaxValue, int.MaxValue, int.MaxValue);
-            }
-            else if (versionRange.Float.FloatBehavior == NuGetVersionFloatBehavior.Patch)
-            {
-                return new NuGetVersion(versionRange.MinVersion.Major, versionRange.MinVersion.Minor, int.MaxValue, int.MaxValue);
-            }
-            else if (versionRange.Float.FloatBehavior == NuGetVersionFloatBehavior.Revision)
-            {
-                return new NuGetVersion(
-                    versionRange.MinVersion.Major,
-                    versionRange.MinVersion.Minor,
-                    versionRange.MinVersion.Patch,
-                    int.MaxValue);
-            }
-            else
-            {
-                return new NuGetVersion(
-                    versionRange.MinVersion.Major,
-                    versionRange.MinVersion.Minor,
-                    versionRange.MinVersion.Patch,
-                    versionRange.MinVersion.Revision);
-            }
-        }
-
         private static void CheckCycleAndNearestWins(
             this GraphNode<RemoteResolveResult> root,
             List<DowngradeResult<RemoteResolveResult>> downgrades,
@@ -151,10 +43,7 @@ namespace NuGet.DependencyResolver
         {
             var workingDowngrades = RentDowngradesDictionary();
 
-            foreach (var node in root.EnumerateAll())
-            {
-                WalkTreeCheckCycleAndNearestWins(CreateState(cycles, workingDowngrades), node);
-            }
+            root.ForEach((node, context) => WalkTreeCheckCycleAndNearestWins(context, node), CreateState(cycles, workingDowngrades));
 
 #if IS_DESKTOP || NETSTANDARD2_0
             // Increase List size for items to be added, if too small
@@ -174,15 +63,6 @@ namespace NuGet.DependencyResolver
             }
 
             ReleaseDowngradesDictionary(workingDowngrades);
-        }
-
-        private static void WalkTreeCheckCycle(List<GraphNode<RemoteResolveResult>> cycles,
-            GraphNode<RemoteResolveResult> node)
-        {
-            if (node.Disposition != Disposition.Cycle)
-                return;
-
-            cycles.Add(node);
         }
 
         private static void WalkTreeCheckCycleAndNearestWins(CyclesAndDowngrades context, GraphNode<RemoteResolveResult> node)
@@ -205,7 +85,7 @@ namespace NuGet.DependencyResolver
             //      -> D 2.0
             //
             // 2. This occurs if none of the sources have version C 1.0 so C 1.0 is bumped up to C 2.0.
-            //
+            // 
             //   A -> B -> C 2.0
             //     -> C 1.0
 
@@ -218,10 +98,7 @@ namespace NuGet.DependencyResolver
 
                 // Remove this node from the tree so the nothing else evaluates this.
                 // This is ok since we have a parent pointer and we can still print the path
-                foreach (var outerNode in node.OuterNodes)
-                {
-                    outerNode.InnerNodes.Remove(node);
-                }
+                node.OuterNode.InnerNodes.Remove(node);
 
                 return;
             }
@@ -231,76 +108,45 @@ namespace NuGet.DependencyResolver
                 return;
             }
 
-            var stack = new Stack<(GraphNode<RemoteResolveResult>, int, bool)>();
-            stack.Push((node, 0, false));
-
-            while (stack.Count > 0)
+            // REVIEW: This could probably be done in a single pass where we keep track
+            // of what is nearer as we walk down the graph (BFS)
+            for (var n = node.OuterNode; n != null; n = n.OuterNode)
             {
-                var (currentNode, idx, downgraded) = stack.Pop();
-
-                while (true)
+                var innerNodes = n.InnerNodes;
+                var count = innerNodes.Count;
+                for (var i = 0; i < count; i++)
                 {
-                    var prevDowngraded = downgraded;
-                    if (currentNode.OuterNodes.Count == 0)
+                    var sideNode = innerNodes[i];
+                    if (sideNode != node && StringComparer.OrdinalIgnoreCase.Equals(sideNode.Key.Name, node.Key.Name))
                     {
-                        if (downgraded == false)
+                        // Nodes that have no version range should be ignored as potential downgrades e.g. framework reference
+                        if (sideNode.Key.VersionRange != null &&
+                            node.Key.VersionRange != null &&
+                            !RemoteDependencyWalker.IsGreaterThanOrEqualTo(sideNode.Key.VersionRange, node.Key.VersionRange))
                         {
-                            node.Disposition = Disposition.Acceptable;
+                            // Is the resolved version actually within node's version range? This happen if there
+                            // was a different request for a lower version of the library than this version range
+                            // allows but no matching library was found, so the library is bumped up into this
+                            // version range.
+                            var resolvedVersion = sideNode?.Item?.Data?.Match?.Library?.Version;
+                            if (resolvedVersion != null && node.Key.VersionRange.Satisfies(resolvedVersion))
+                            {
+                                continue;
+                            }
+
+                            workingDowngrades[node] = sideNode;
+                        }
+                        else
+                        {
                             workingDowngrades.Remove(node);
-                            return;
-                        }
-
-                        break;
-                    }
-
-                    if (idx >= currentNode.OuterNodes.Count)
-                        break;
-
-                    var outerNode = currentNode.OuterNodes[idx];
-                    var sideNodes = outerNode.InnerNodes;
-                    var count = sideNodes.Count;
-                    for (var i = 0; i < count; i++)
-                    {
-                        var sideNode = sideNodes[i];
-                        if (sideNode != node && StringComparer.OrdinalIgnoreCase.Equals(sideNode.Key.Name, node.Key.Name))
-                        {
-                            // Nodes that have no version range should be ignored as potential downgrades e.g. framework reference
-                            if (sideNode.Key.VersionRange != null &&
-                                node.Key.VersionRange != null &&
-                                !RemoteDependencyWalker.IsGreaterThanOrEqualTo(sideNode.Key.VersionRange, node.Key.VersionRange))
-                            {
-                                // Is the resolved version actually within node's version range? This happen if there
-                                // was a different request for a lower version of the library than this version range
-                                // allows but no matching library was found, so the library is bumped up into this
-                                // version range.
-                                var resolvedVersion = sideNode?.Item?.Data?.Match?.Library?.Version;
-                                if (resolvedVersion != null && node.Key.VersionRange.Satisfies(resolvedVersion))
-                                {
-                                    continue;
-                                }
-
-                                workingDowngrades[node] = sideNode;
-                                downgraded = true;
-                            }
-                            else
-                            {
-                                downgraded = false;
-                            }
                         }
                     }
-
-                    stack.Push((currentNode, idx+1, prevDowngraded));
-                    currentNode = outerNode;
-                    idx = 0;
                 }
             }
 
             // Remove this node from the tree so the nothing else evaluates this.
             // This is ok since we have a parent pointer and we can still print the path
-            foreach (var outerNode in node.OuterNodes)
-            {
-                outerNode.InnerNodes.Remove(node);
-            }
+            node.OuterNode.InnerNodes.Remove(node);
         }
 
         /// <summary>
@@ -314,7 +160,7 @@ namespace NuGet.DependencyResolver
             while (current != null)
             {
                 nodeStrings.Push(current.GetIdAndVersionOrRange());
-                current = current.OuterNodes.FirstOrDefault();
+                current = current.OuterNode;
             }
 
             return string.Join(NodeArrow, nodeStrings);
@@ -333,7 +179,7 @@ namespace NuGet.DependencyResolver
                 // Display the range for the last node, show the version of all parents.
                 var nodeString = nodeStrings.Count == 0 ? current.GetIdAndRange() : current.GetIdAndVersionOrRange();
                 nodeStrings.Push(nodeString);
-                current = current.OuterNodes.FirstOrDefault();
+                current = current.OuterNode;
             }
 
             return string.Join(NodeArrow, nodeStrings);
@@ -470,7 +316,7 @@ namespace NuGet.DependencyResolver
 
         private static bool TryResolveConflicts<TItem>(this GraphNode<TItem> root, List<VersionConflictResult<TItem>> versionConflicts)
         {
-            // now we walk the tree as often as it takes to determine
+            // now we walk the tree as often as it takes to determine 
             // which paths are accepted or rejected, based on conflicts occuring
             // between cousin packages
 
@@ -480,17 +326,19 @@ namespace NuGet.DependencyResolver
             var incomplete = true;
 
             var tracker = Cache<TItem>.RentTracker();
+            Func<GraphNode<TItem>, bool> skipNode = null;
 
             var centralTransitiveNodes = root.InnerNodes.Where(n => n.Item.IsCentralTransitive).ToList();
             var hasCentralTransitiveDependencies = centralTransitiveNodes.Count > 0;
+            if (hasCentralTransitiveDependencies)
+            {
+                skipNode = (node) => { return node.Item.IsCentralTransitive; };
+            }
 
             while (incomplete && --patience != 0)
             {
                 // Create a picture of what has not been rejected yet
-                foreach (var node in root.EnumerateAllInTopologicalOrder())
-                {
-                    WalkTreeRejectNodesOfRejectedNodes(node, tracker);
-                }
+                root.ForEach(true, (node, state, context) => WalkTreeRejectNodesOfRejectedNodes(state, node, context), tracker, skipNode);
 
                 if (hasCentralTransitiveDependencies)
                 {
@@ -499,39 +347,39 @@ namespace NuGet.DependencyResolver
                     root.RejectCentralTransitiveBecauseOfRejectedParents(tracker, centralTransitiveNodes);
                 }
 
-                foreach (var node in root.EnumerateAll().Where(x => x.Disposition != Disposition.Rejected))
+                // Inform tracker of ambiguity beneath nodes that are not resolved yet
+                root.ForEach(WalkState.Walking, (node, state, context) => WalkTreeMarkAmbiguousNodes(node, state, context), tracker);
+
+                if (hasCentralTransitiveDependencies)
                 {
-                    tracker.Track(node.Item);
+                    DetectAndMarkAmbiguousCentralTransitiveDependencies(tracker, centralTransitiveNodes);
                 }
 
-                foreach (var node in root.EnumerateAllInTopologicalOrder())
-                {
-                    WalkTreeAcceptOrRejectNodes(node, CreateState(tracker, acceptedLibraries));
-                }
+                root.ForEach(true, (node, state, context) => WalkTreeAcceptOrRejectNodes(context, state, node), CreateState(tracker, acceptedLibraries));
 
-                incomplete = root.EnumerateAll().Any(x => x.Disposition == Disposition.Acceptable);
+                incomplete = root.ForEachGlobalState(false, (node, state) => state || node.Disposition == Disposition.Acceptable);
 
                 tracker.Clear();
             }
 
             Cache<TItem>.ReleaseTracker(tracker);
 
-            foreach (var node in root.EnumerateAll())
-            {
-                WalkTreeDectectConflicts(node, versionConflicts, acceptedLibraries);
-            }
+            root.ForEach((node, context) => WalkTreeDectectConflicts(node, context), CreateState(versionConflicts, acceptedLibraries));
 
             Cache<TItem>.ReleaseDictionary(acceptedLibraries);
 
             return !incomplete;
         }
 
-        private static void WalkTreeDectectConflicts<TItem>(GraphNode<TItem> node,  List<VersionConflictResult<TItem>> versionConflicts, Dictionary<string, GraphNode<TItem>> acceptedLibraries)
+        private static void WalkTreeDectectConflicts<TItem>(GraphNode<TItem> node, ConflictsAndAccepted<TItem> context)
         {
             if (node.Disposition != Disposition.Accepted)
             {
                 return;
             }
+
+            var versionConflicts = context.VersionConflicts;
+            var acceptedLibraries = context.AcceptedLibraries;
 
             // For all accepted nodes, find dependencies that aren't satisfied by the version
             // of the package that we have selected
@@ -570,25 +418,63 @@ namespace NuGet.DependencyResolver
             }
         }
 
-        private static void WalkTreeRejectNodesOfRejectedNodes<TItem>(GraphNode<TItem> node, Tracker<TItem> context)
+        private static WalkState WalkTreeMarkAmbiguousNodes<TItem>(GraphNode<TItem> node, WalkState state, Tracker<TItem> context)
         {
-            if (node.OuterNodes.Count > 0 && node.OuterNodes.All(x=>x.Disposition == Disposition.Rejected))
+            // between:
+            // a1->b1->d1->x1
+            // a1->c1->d2->z1
+            // first attempt
+            //  d1/d2 are considered disputed 
+            //  x1 and z1 are considered ambiguous
+            //  d1 is rejected
+            // second attempt
+            //  d1 is rejected, d2 is accepted
+            //  x1 is no longer seen, and z1 is not ambiguous
+            //  z1 is accepted
+            if (node.Disposition == Disposition.Rejected)
+            {
+                return WalkState.Rejected;
+            }
+
+            if (state == WalkState.Walking
+                && context.IsDisputed(node.Item))
+            {
+                return WalkState.Ambiguous;
+            }
+
+            if (state == WalkState.Ambiguous)
+            {
+                context.MarkAmbiguous(node.Item);
+            }
+
+            return state;
+        }
+
+        private static bool WalkTreeRejectNodesOfRejectedNodes<TItem>(bool state, GraphNode<TItem> node, Tracker<TItem> context)
+        {
+            if (!state || node.Disposition == Disposition.Rejected)
             {
                 // Mark all nodes as rejected if they aren't already marked
                 node.Disposition = Disposition.Rejected;
+                return false;
             }
+
+            context.Track(node.Item);
+            return true;
         }
 
-        private static bool WalkTreeAcceptOrRejectNodes<TItem>(GraphNode<TItem> node, TrackerAndAccepted<TItem> context)
+        private static bool WalkTreeAcceptOrRejectNodes<TItem>(TrackerAndAccepted<TItem> context, bool state, GraphNode<TItem> node)
         {
             var tracker = context.Tracker;
             var acceptedLibraries = context.AcceptedLibraries;
 
-            if (node.ParentNodes.Count > 0 && node.ParentNodes.All(x => x.Disposition != Disposition.Accepted))
+            if (!state
+                || node.Disposition == Disposition.Rejected)
             {
                 return false;
             }
-            else if (node.OuterNodes.Count > 0 && node.OuterNodes.All(x => x.Disposition != Disposition.Accepted))
+
+            if (tracker.IsAmbiguous(node.Item))
             {
                 return false;
             }
@@ -609,6 +495,48 @@ namespace NuGet.DependencyResolver
             return node.Disposition == Disposition.Accepted;
         }
 
+        private static TState ForEachGlobalState<TItem, TState>(this GraphNode<TItem> root, TState state, Func<GraphNode<TItem>, TState, TState> visitor, Func<GraphNode<TItem>, bool> skipNode = null)
+        {
+            var queue = Cache<TItem>.RentQueue();
+            // breadth-first walk of Node tree
+
+            queue.Enqueue(root);
+            while (queue.Count > 0)
+            {
+                var work = queue.Dequeue();
+                if (skipNode == null || !skipNode(work))
+                {
+                    state = visitor(work, state);
+
+                    AddInnerNodesToQueue(work.InnerNodes, queue);
+                }
+            }
+
+            Cache<TItem>.ReleaseQueue(queue);
+
+            return state;
+        }
+
+        private static void ForEach<TItem, TState, TContext>(this GraphNode<TItem> root, TState state, Func<GraphNode<TItem>, TState, TContext, TState> visitor, TContext context, Func<GraphNode<TItem>, bool> skipNode = null)
+        {
+            var queue = Cache<TItem, TState>.RentQueue();
+
+            // breadth-first walk of Node tree
+            queue.Enqueue(NodeWithState.Create(root, state));
+            while (queue.Count > 0)
+            {
+                var work = queue.Dequeue();
+                if (skipNode == null || !skipNode(work.Node))
+                {
+                    state = visitor(work.Node, work.State, context);
+
+                    AddInnerNodesToQueue(work.Node.InnerNodes, queue, state);
+                }
+            }
+
+            Cache<TItem, TState>.ReleaseQueue(queue);
+        }
+
         public static void ForEach<TItem>(this IEnumerable<GraphNode<TItem>> roots, Action<GraphNode<TItem>> visitor)
         {
             var queue = Cache<TItem>.RentQueue();
@@ -621,7 +549,26 @@ namespace NuGet.DependencyResolver
                 while (queue.Count > 0)
                 {
                     var node = queue.Dequeue();
+                    visitor(node);
 
+                    AddInnerNodesToQueue(node.InnerNodes, queue);
+                }
+            }
+
+            Cache<TItem>.ReleaseQueue(queue);
+        }
+
+        private static void ForEach<TItem>(this GraphNode<TItem> root, Action<GraphNode<TItem>> visitor, Func<GraphNode<TItem>, bool> skipNode)
+        {
+            var queue = Cache<TItem>.RentQueue();
+
+            // breadth-first walk of Node tree, no state
+            queue.Enqueue(root);
+            while (queue.Count > 0)
+            {
+                var node = queue.Dequeue();
+                if (skipNode == null || !skipNode(node))
+                {
                     visitor(node);
 
                     AddInnerNodesToQueue(node.InnerNodes, queue);
@@ -633,6 +580,11 @@ namespace NuGet.DependencyResolver
 
         public static void ForEach<TItem>(this GraphNode<TItem> root, Action<GraphNode<TItem>> visitor)
         {
+            ForEach(root, visitor, skipNode: null);
+        }
+
+        private static void ForEach<TItem, TContext>(this GraphNode<TItem> root, Action<GraphNode<TItem>, TContext> visitor, TContext context, Func<GraphNode<TItem>, bool> skipNode)
+        {
             var queue = Cache<TItem>.RentQueue();
 
             // breadth-first walk of Node tree, no state
@@ -640,73 +592,30 @@ namespace NuGet.DependencyResolver
             while (queue.Count > 0)
             {
                 var node = queue.Dequeue();
-                visitor(node);
-                AddInnerNodesToQueue(node.InnerNodes, queue);
-            }
-
-            Cache<TItem>.ReleaseQueue(queue);
-        }
-
-        internal static IEnumerable<GraphNode<TItem>> EnumerateAll<TItem>(this GraphNode<TItem> root)
-        {
-            var queue = Cache<TItem>.RentQueue();
-            var visitedNodes = new HashSet<GraphNode<TItem>>();
-
-            // breadth-first walk of Node tree, visit each node only once
-            queue.Enqueue(root);
-            while (queue.Count > 0)
-            {
-                var node = queue.Dequeue();
-                if (!visitedNodes.Add(node))
-                    continue;
-
-                yield return node;
-                foreach (var innerNode in node.InnerNodes)
+                if (skipNode == null || !skipNode(node))
                 {
-                    queue.Enqueue(innerNode);
+                    visitor(node, context);
+
+                    AddInnerNodesToQueue(node.InnerNodes, queue);
                 }
             }
 
             Cache<TItem>.ReleaseQueue(queue);
-        }
-
-        private static IEnumerable<GraphNode<TItem>> EnumerateAllInTopologicalOrder<TItem>(this GraphNode<TItem> root)
-        {
-            var inDegree = root.EnumerateAll()
-                .ToDictionary(x => x, x => x.OuterNodes.Count);
-
-            var queue = Cache<TItem>.RentQueue();
-            // breadth-first walk of Node tree, no state
-            queue.Enqueue(root);
-            while (queue.Count > 0)
-            {
-                var node = queue.Dequeue();
-                yield return node;
-                foreach (var innerNode in node.InnerNodes)
-                {
-                    if (--inDegree[innerNode] == 0)
-                    {
-                        queue.Enqueue(innerNode);
-                    }
-                }
-            }
         }
 
         public static void ForEach<TItem, TContext>(this GraphNode<TItem> root, Action<GraphNode<TItem>, TContext> visitor, TContext context)
         {
-            var queue = Cache<TItem>.RentQueue();
-            // breadth-first walk of Node tree, no state
-            queue.Enqueue(root);
-            while (queue.Count > 0)
+            ForEach(root, visitor, context, skipNode: null);
+        }
+
+        private static void AddInnerNodesToQueue<TItem, TState>(IList<GraphNode<TItem>> innerNodes, Queue<NodeWithState<TItem, TState>> queue, TState innerState)
+        {
+            var count = innerNodes.Count;
+            for (var i = 0; i < count; i++)
             {
-                var node = queue.Dequeue();
-
-                visitor(node, context);
-
-                AddInnerNodesToQueue(node.InnerNodes, queue);
+                var innerNode = innerNodes[i];
+                queue.Enqueue(NodeWithState.Create(innerNode, innerState));
             }
-
-            Cache<TItem>.ReleaseQueue(queue);
         }
 
         private static void AddInnerNodesToQueue<TItem>(IList<GraphNode<TItem>> innerNodes, Queue<GraphNode<TItem>> queue)
@@ -741,6 +650,35 @@ namespace NuGet.DependencyResolver
                 dictionary.Clear();
                 _tempDowngrades = dictionary;
             }
+        }
+
+        private static class Cache<TItem, TState>
+        {
+            [ThreadStatic]
+            private static Queue<NodeWithState<TItem, TState>> _queue;
+
+
+            public static Queue<NodeWithState<TItem, TState>> RentQueue()
+            {
+                var queue = _queue;
+                if (queue != null)
+                {
+                    _queue = null;
+                    return queue;
+                }
+
+                return new Queue<NodeWithState<TItem, TState>>();
+            }
+
+            public static void ReleaseQueue(Queue<NodeWithState<TItem, TState>> queue)
+            {
+                if (_queue == null)
+                {
+                    queue.Clear();
+                    _queue = queue;
+                }
+            }
+
         }
 
         private static class Cache<TItem>
@@ -816,6 +754,38 @@ namespace NuGet.DependencyResolver
             }
         }
 
+        private struct NodeWithState<TItem, TState>
+        {
+            public GraphNode<TItem> Node;
+            public TState State;
+        }
+
+        private static class NodeWithState
+        {
+            public static NodeWithState<TItem, TState> Create<TItem, TState>(GraphNode<TItem> node, TState state)
+            {
+                return new NodeWithState<TItem, TState>
+                {
+                    Node = node,
+                    State = state
+                };
+            }
+        }
+
+        private struct ConflictsAndAccepted<TItem>
+        {
+            public List<VersionConflictResult<TItem>> VersionConflicts;
+            public Dictionary<string, GraphNode<TItem>> AcceptedLibraries;
+        }
+        private static ConflictsAndAccepted<TItem> CreateState<TItem>(List<VersionConflictResult<TItem>> versionConflicts, Dictionary<string, GraphNode<TItem>> acceptedLibraries)
+        {
+            return new ConflictsAndAccepted<TItem>
+            {
+                VersionConflicts = versionConflicts,
+                AcceptedLibraries = acceptedLibraries
+            };
+        }
+
         private struct TrackerAndAccepted<TItem>
         {
             public Tracker<TItem> Tracker;
@@ -846,27 +816,74 @@ namespace NuGet.DependencyResolver
             };
         }
 
+        private static void DetectAndMarkAmbiguousCentralTransitiveDependencies<TItem>(Tracker<TItem> tracker, List<GraphNode<TItem>> centralTransitiveNodes)
+        {
+            // if a central transitive node has all parents disputed or ambiguous mark it and its children ambiguous
+            int ctdCount = centralTransitiveNodes.Count;
+            for (int i = 0; i < ctdCount; i++)
+            {
+                if (centralTransitiveNodes[i].Disposition == Disposition.Acceptable)
+                {
+                    bool allParentsAreDisputedOrAmbiguous = !centralTransitiveNodes[i].ParentNodes
+                        .Any(p => p.Disposition != Disposition.Rejected && !(tracker.IsDisputed(p.Item) || tracker.IsAmbiguous(p.Item)));
+
+                    if (allParentsAreDisputedOrAmbiguous)
+                    {
+                        // children of ambiguous nodes were already marked as ambiguous, skip them
+                        centralTransitiveNodes[i].ForEach(x => tracker.MarkAmbiguous(x.Item), pn => tracker.IsAmbiguous(pn.Item));
+                    }
+                }
+            };
+        }
+
         private static void RejectCentralTransitiveBecauseOfRejectedParents<TItem>(this GraphNode<TItem> root, Tracker<TItem> tracker, List<GraphNode<TItem>> centralTransitiveNodes)
         {
+            HashSet<GraphNode<TItem>> internalContext = new HashSet<GraphNode<TItem>>();
+
+            // reject nodes of rejected nodes for the central transitive nodes and track nodes that were not yet rejected
+            // as more nodes can be rejected do not track the nodes until all the rejects are completed
+            int ctdCount = centralTransitiveNodes.Count;
+            for (int i = 0; i < ctdCount; i++)
+            {
+                centralTransitiveNodes[i].ForEach(root.Disposition != Disposition.Rejected, (node, state, context) => WalkTreeRejectNodesOfRejectedNodes(state, node, context), internalContext);
+            }
+
             // If a node has its parents rejected, reject the node and its children
             // Need to do this in a loop because more nodes can be rejected as their parents become rejected
             bool pendingRejections = true;
             while (pendingRejections)
             {
                 pendingRejections = false;
-                for (int i = 0; i < centralTransitiveNodes.Count; i++)
+                for (int i = 0; i < ctdCount; i++)
                 {
                     if (centralTransitiveNodes[i].Disposition == Disposition.Acceptable && centralTransitiveNodes[i].AreAllParentsRejected())
                     {
-                        foreach (var node in centralTransitiveNodes[i].EnumerateAll())
-                        {
-                            node.Disposition = Disposition.Rejected;
-                        }
-
+                        centralTransitiveNodes[i].ForEach(n => n.Disposition = Disposition.Rejected);
                         pendingRejections = true;
                     }
                 }
             }
+
+            // now add all the not rejected nodes to the tracker
+            foreach (var node in internalContext)
+            {
+                if (node.Disposition != Disposition.Rejected)
+                {
+                    tracker.Track(node.Item);
+                }
+            }
+        }
+
+        private static bool WalkTreeRejectNodesOfRejectedNodes<TItem>(bool state, GraphNode<TItem> node, HashSet<GraphNode<TItem>> context)
+        {
+            if (!state || node.Disposition == Disposition.Rejected)
+            {
+                // Mark all nodes as rejected if they aren't already marked
+                node.Disposition = Disposition.Rejected;
+                return false;
+            }
+            context.Add(node);
+            return true;
         }
 
         // Box Drawing Unicode characters:

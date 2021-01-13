@@ -135,7 +135,7 @@ namespace NuGet.DependencyResolver.Core.Tests
         {
             var node = GetPackageNode("b", "1.0.0", "2.0.0");
             var parent = GetPackageNode("a", "1.*", "3.0.0");
-            node.OuterNodes.Add(parent);
+            node.OuterNode = parent;
 
             node.GetPath().Should().Be("a 3.0.0 -> b 2.0.0");
         }
@@ -145,7 +145,7 @@ namespace NuGet.DependencyResolver.Core.Tests
         {
             var node = GetPackageNode("b", "1.*", "2.0.0");
             var parent = GetProjectNode("a");
-            node.OuterNodes.Add(parent);
+            node.OuterNode = parent;
 
             node.GetPath().Should().Be("a -> b 2.0.0");
         }
@@ -155,7 +155,7 @@ namespace NuGet.DependencyResolver.Core.Tests
         {
             var node = GetUnresolvedNode("b", "1.*", LibraryDependencyTarget.Package);
             var parent = GetProjectNode("a");
-            node.OuterNodes.Add(parent);
+            node.OuterNode = parent;
 
             node.GetPath().Should().Be("a -> B (>= 1.0.0)");
         }
@@ -165,7 +165,7 @@ namespace NuGet.DependencyResolver.Core.Tests
         {
             var node = GetPackageNode("b", "1.0.0", "2.0.0");
             var parent = GetPackageNode("a", "1.*", "3.0.0");
-            node.OuterNodes.Add(parent);
+            node.OuterNode = parent;
 
             node.GetPathWithLastRange().Should().Be("a 3.0.0 -> b (>= 1.0.0)");
         }
@@ -175,7 +175,7 @@ namespace NuGet.DependencyResolver.Core.Tests
         {
             var node = GetProjectNode("b");
             var parent = GetProjectNode("a");
-            node.OuterNodes.Add(parent);
+            node.OuterNode = parent;
 
             node.GetPathWithLastRange().Should().Be("a -> b");
         }

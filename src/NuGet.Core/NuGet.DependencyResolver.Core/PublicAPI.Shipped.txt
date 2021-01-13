@@ -43,7 +43,8 @@ NuGet.DependencyResolver.GraphNode<TItem>.Item.get -> NuGet.DependencyResolver.G
 NuGet.DependencyResolver.GraphNode<TItem>.Item.set -> void
 NuGet.DependencyResolver.GraphNode<TItem>.Key.get -> NuGet.LibraryModel.LibraryRange
 NuGet.DependencyResolver.GraphNode<TItem>.Key.set -> void
-NuGet.DependencyResolver.GraphNode<TItem>.OuterNodes.get -> System.Collections.Generic.IList<NuGet.DependencyResolver.GraphNode<TItem>>
+NuGet.DependencyResolver.GraphNode<TItem>.OuterNode.get -> NuGet.DependencyResolver.GraphNode<TItem>
+NuGet.DependencyResolver.GraphNode<TItem>.OuterNode.set -> void
 NuGet.DependencyResolver.GraphOperations
 NuGet.DependencyResolver.IDependencyProvider
 NuGet.DependencyResolver.IDependencyProvider.GetLibrary(NuGet.LibraryModel.LibraryRange libraryRange, NuGet.Frameworks.NuGetFramework targetFramework) -> NuGet.LibraryModel.Library
