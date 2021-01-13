@@ -26,9 +26,6 @@ namespace NuGet.DependencyResolver
             // Remove all downgrades that didn't result in selecting the node we actually downgraded to
             result.Downgrades.RemoveAll(d => d.DowngradedTo.Disposition != Disposition.Accepted);
 
-            if (root.EnumerateAll().FirstOrDefault(x => x.Disposition == Disposition.Acceptable) != null)
-                throw new Exception();
-
             return result;
         }
 
@@ -234,41 +231,67 @@ namespace NuGet.DependencyResolver
                 return;
             }
 
+            var stack = new Stack<(GraphNode<RemoteResolveResult>, int, bool)>();
+            stack.Push((node, 0, false));
 
-
-            // REVIEW: This could probably be done in a single pass where we keep track
-            // of what is nearer as we walk down the graph (BFS)
-            for (var n = node.OuterNodes.FirstOrDefault(); n != null; n = n.OuterNodes.FirstOrDefault())
+            while (stack.Count > 0)
             {
-                var innerNodes = n.InnerNodes;
-                var count = innerNodes.Count;
-                for (var i = 0; i < count; i++)
-                {
-                    var sideNode = innerNodes[i];
-                    if (sideNode != node && StringComparer.OrdinalIgnoreCase.Equals(sideNode.Key.Name, node.Key.Name))
-                    {
-                        // Nodes that have no version range should be ignored as potential downgrades e.g. framework reference
-                        if (sideNode.Key.VersionRange != null &&
-                            node.Key.VersionRange != null &&
-                            !RemoteDependencyWalker.IsGreaterThanOrEqualTo(sideNode.Key.VersionRange, node.Key.VersionRange))
-                        {
-                            // Is the resolved version actually within node's version range? This happen if there
-                            // was a different request for a lower version of the library than this version range
-                            // allows but no matching library was found, so the library is bumped up into this
-                            // version range.
-                            var resolvedVersion = sideNode?.Item?.Data?.Match?.Library?.Version;
-                            if (resolvedVersion != null && node.Key.VersionRange.Satisfies(resolvedVersion))
-                            {
-                                continue;
-                            }
+                var (currentNode, idx, downgraded) = stack.Pop();
 
-                            workingDowngrades[node] = sideNode;
-                        }
-                        else
+                while (true)
+                {
+                    var prevDowngraded = downgraded;
+                    if (currentNode.OuterNodes.Count == 0)
+                    {
+                        if (downgraded == false)
                         {
+                            node.Disposition = Disposition.Acceptable;
                             workingDowngrades.Remove(node);
+                            return;
+                        }
+
+                        break;
+                    }
+
+                    if (idx >= currentNode.OuterNodes.Count)
+                        break;
+
+                    var outerNode = currentNode.OuterNodes[idx];
+                    var sideNodes = outerNode.InnerNodes;
+                    var count = sideNodes.Count;
+                    for (var i = 0; i < count; i++)
+                    {
+                        var sideNode = sideNodes[i];
+                        if (sideNode != node && StringComparer.OrdinalIgnoreCase.Equals(sideNode.Key.Name, node.Key.Name))
+                        {
+                            // Nodes that have no version range should be ignored as potential downgrades e.g. framework reference
+                            if (sideNode.Key.VersionRange != null &&
+                                node.Key.VersionRange != null &&
+                                !RemoteDependencyWalker.IsGreaterThanOrEqualTo(sideNode.Key.VersionRange, node.Key.VersionRange))
+                            {
+                                // Is the resolved version actually within node's version range? This happen if there
+                                // was a different request for a lower version of the library than this version range
+                                // allows but no matching library was found, so the library is bumped up into this
+                                // version range.
+                                var resolvedVersion = sideNode?.Item?.Data?.Match?.Library?.Version;
+                                if (resolvedVersion != null && node.Key.VersionRange.Satisfies(resolvedVersion))
+                                {
+                                    continue;
+                                }
+
+                                workingDowngrades[node] = sideNode;
+                                downgraded = true;
+                            }
+                            else
+                            {
+                                downgraded = false;
+                            }
                         }
                     }
+
+                    stack.Push((currentNode, idx+1, prevDowngraded));
+                    currentNode = outerNode;
+                    idx = 0;
                 }
             }
 
@@ -624,7 +647,7 @@ namespace NuGet.DependencyResolver
             Cache<TItem>.ReleaseQueue(queue);
         }
 
-        private static IEnumerable<GraphNode<TItem>> EnumerateAll<TItem>(this GraphNode<TItem> root)
+        internal static IEnumerable<GraphNode<TItem>> EnumerateAll<TItem>(this GraphNode<TItem> root)
         {
             var queue = Cache<TItem>.RentQueue();
             var visitedNodes = new HashSet<GraphNode<TItem>>();

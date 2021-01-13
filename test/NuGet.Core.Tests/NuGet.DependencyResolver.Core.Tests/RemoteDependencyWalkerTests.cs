@@ -1913,44 +1913,6 @@ namespace NuGet.DependencyResolver.Tests
         }
 
         /// <summary>
-        ///                -> D 1.0
-        ///       -> B 1.0          -> F 1.0
-        ///                -> E 1.0
-        /// A 1.0
-        ///       -> C 1.0 -> E 2.0
-        /// </summary>
-        [Fact]
-        public async Task TmpMy1()
-        {
-            var context = new TestRemoteWalkContext();
-            var provider = new DependencyProvider();
-            provider.Package("A", "1.0")
-                .DependsOn("B", "1.0")
-                .DependsOn("C", "1.0");
-
-            provider.Package("B", "1.0")
-                .DependsOn("D", "1.0")
-                .DependsOn("E", "1.0");
-
-            provider.Package("D", "1.0")
-                .DependsOn("F", "1.0");
-
-            provider.Package("E", "1.0")
-                .DependsOn("F", "1.0");
-
-            provider.Package("C", "1.0")
-                .DependsOn("E", "2.0");
-
-            context.LocalLibraryProviders.Add(provider);
-            var walker = new RemoteDependencyWalker(context);
-            var node = await DoWalkAsync(walker, "A");
-
-            var result = node.Analyze();
-
-            Assert.Equal(0, result.VersionConflicts.Count);
-        }
-
-        /// <summary>
         ///       -> B 1.0 -> C 2.0
         /// A 1.0
         ///       -> C 1.0 -> B 2.0
@@ -1977,6 +1939,8 @@ namespace NuGet.DependencyResolver.Tests
             var result = node.Analyze();
 
             Assert.Equal(0, result.VersionConflicts.Count);
+            Assert.Equal(2, result.Downgrades.Count);
+            Assert.Equal(0, result.Cycles.Count);
         }
 
         /// <summary>
@@ -2014,6 +1978,8 @@ namespace NuGet.DependencyResolver.Tests
             Assert.Equal(0, result.VersionConflicts.Count);
             Assert.Equal(0, result.Downgrades.Count);
             Assert.Equal(0, result.Cycles.Count);
+            Assert.Equal(0, node.EnumerateAll().Count(x => x.Disposition == Disposition.Acceptable));
+            Assert.Equal(4, node.EnumerateAll().Count(x => x.Disposition == Disposition.Rejected));
         }
 
         /// <summary>
@@ -2025,7 +1991,7 @@ namespace NuGet.DependencyResolver.Tests
         [Fact]
         public async Task TmpMy4()
         {
-            for (int i = 0; i < 1000000; i++)
+            for (int i = 0; i < 1; i++)
             {
                 var context = new TestRemoteWalkContext();
                 var provider = new DependencyProvider();

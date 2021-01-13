@@ -239,7 +239,15 @@ namespace NuGet.DependencyResolver
                         {
                             var dependencyNode = new GraphNode<RemoteResolveResult>(dependency.LibraryRange)
                             {
-                                Disposition = result.dependencyResult == DependencyResult.Cycle ? Disposition.Cycle : Disposition.PotentiallyDowngraded
+                                Disposition = result.dependencyResult == DependencyResult.Cycle ? Disposition.Cycle : Disposition.PotentiallyDowngraded,
+                                // Resolve the dependency from the cache or sources
+                                Item = await ResolverUtility.FindLibraryCachedAsync(
+                                    _context.FindLibraryEntryCache,
+                                    dependency.LibraryRange,
+                                    framework,
+                                    runtimeName,
+                                    _context,
+                                    CancellationToken.None)
                             };
 
                             dependencyNode.OuterNodes.Add(node);
