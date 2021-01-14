@@ -534,7 +534,7 @@ namespace NuGet.DependencyResolver
             }
 
             // For all accepted nodes, find dependencies that aren't satisfied by the version
-            // of the package that we have selected
+            // of the package that we have selectedc
             var innerNodes = node.InnerNodes;
             var count = innerNodes.Count;
             for (var i = 0; i < count; i++)

@@ -36,9 +36,10 @@ namespace NuGet.DependencyResolver
                 framework: framework,
                 runtimeName: runtimeIdentifier,
                 runtimeGraph: runtimeGraph,
-                predicate: _ => (recursive ? DependencyResult.Acceptable : DependencyResult.Eclipsed, null),
+                predicate: _ => (recursive ? DependencyResult.Acceptable : DependencyResult.PotentiallyEclipsed, null),
                 outerEdge: null,
                 transitiveCentralPackageVersions: transitiveCentralPackageVersions,
+                Disposition.Acceptable,
                 graphNodesCache);
 
             // do not calculate the hashset of the direct dependencies for cases when there are not any elements in the transitiveCentralPackageVersions queue
@@ -79,6 +80,7 @@ namespace NuGet.DependencyResolver
             Func<LibraryRange, (DependencyResult dependencyResult, LibraryDependency conflictingDependency)> predicate,
             GraphEdge<RemoteResolveResult> outerEdge,
             TransitiveCentralPackageVersions transitiveCentralPackageVersions,
+            Disposition nodeDisposition,
             ConcurrentDictionary<LibraryRange, Lazy<Task<GraphNode<RemoteResolveResult>>>> graphNodesCache)
         {
             List<LibraryDependency> dependencies = null;
@@ -136,7 +138,8 @@ namespace NuGet.DependencyResolver
                     framework,
                     runtimeName,
                     _context,
-                    CancellationToken.None)
+                    CancellationToken.None),
+                Disposition = nodeDisposition,
             };
 
             Debug.Assert(node.Item != null, "FindLibraryCached should return an unresolved item instead of null");
@@ -186,7 +189,7 @@ namespace NuGet.DependencyResolver
                     }
 
                     if (result.dependencyResult == DependencyResult.Acceptable ||
-                        result.dependencyResult == DependencyResult.Eclipsed)
+                        result.dependencyResult == DependencyResult.PotentiallyEclipsed)
                     {
                         // Dependency edge from the current node to the dependency
                         var innerEdge = new GraphEdge<RemoteResolveResult>(outerEdge, node.Item, dependency);
@@ -205,6 +208,7 @@ namespace NuGet.DependencyResolver
                                 ChainPredicate(predicate, node, dependency),
                                 innerEdge,
                                 transitiveCentralPackageVersions,
+                                result.dependencyResult == DependencyResult.Acceptable ? Disposition.Acceptable : Disposition.PotentiallyEclipsed,
                                 graphNodesCache)));
 
                         // disable concurrency
@@ -296,7 +300,7 @@ namespace NuGet.DependencyResolver
                             return (DependencyResult.PotentiallyDowngraded, d);
                         }
 
-                        return (DependencyResult.Eclipsed, d);
+                        return (DependencyResult.PotentiallyEclipsed, d);
                     }
                 }
 
@@ -422,7 +426,7 @@ namespace NuGet.DependencyResolver
         private enum DependencyResult
         {
             Acceptable,
-            Eclipsed,
+            PotentiallyEclipsed,
             PotentiallyDowngraded,
             Cycle
         }
@@ -458,6 +462,7 @@ namespace NuGet.DependencyResolver
                     predicate: ChainPredicate(_ => (DependencyResult.Acceptable, null), rootNode, centralPackageVersionDependency),
                     outerEdge: null,
                     transitiveCentralPackageVersions: transitiveCentralPackageVersions,
+                    Disposition.Acceptable,
                     graphNodesCache);
 
             node.OuterNodes.Add(rootNode);
