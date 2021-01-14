@@ -164,11 +164,23 @@ namespace NuGet.DependencyResolver
                 }
             }
 
+            foreach (var node in root.EnumerateAll())
+            {
+                node.ParentNodes = node.ParentNodes
+                    .Where(x => x.Disposition != Disposition.PotentiallyEclipsed)
+                    .ToList();
+            }
+
             foreach (var nodeToRemove in nodesToRemove)
             {
                 foreach (var outerNode in nodeToRemove.OuterNodes)
                 {
                     outerNode.InnerNodes.Remove(nodeToRemove);
+                }
+
+                foreach (var innerNode in nodeToRemove.InnerNodes)
+                {
+                    innerNode.OuterNodes.Remove(nodeToRemove);
                 }
             }
 

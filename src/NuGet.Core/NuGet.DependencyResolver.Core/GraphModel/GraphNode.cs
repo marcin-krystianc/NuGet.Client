@@ -29,7 +29,7 @@ namespace NuGet.DependencyResolver
         /// <summary>
         /// Used in case that a node is removed from its outernode and needs to keep reference of its parents.
         /// </summary>
-        internal IList<GraphNode<TItem>> ParentNodes { get; }
+        internal IList<GraphNode<TItem>> ParentNodes { get; set; }
 
         internal bool AreAllParentsRejected()
         {

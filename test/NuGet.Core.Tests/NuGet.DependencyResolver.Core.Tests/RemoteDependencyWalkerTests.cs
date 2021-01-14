@@ -1028,6 +1028,7 @@ namespace NuGet.DependencyResolver.Tests
 
             // Act
             var rootNode = await DoWalkAsync(walker, "A", framework);
+            rootNode.Analyze();
 
             // Assert
             Assert.Equal(2, rootNode.InnerNodes.Count);
