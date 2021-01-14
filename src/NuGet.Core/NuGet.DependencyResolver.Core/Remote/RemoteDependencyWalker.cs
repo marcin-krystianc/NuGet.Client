@@ -185,7 +185,8 @@ namespace NuGet.DependencyResolver
                         result = (dependencyResult: DependencyResult.Cycle, conflictingDependency: dependency);
                     }
 
-                    if (result.dependencyResult == DependencyResult.Acceptable)
+                    if (result.dependencyResult == DependencyResult.Acceptable ||
+                        result.dependencyResult == DependencyResult.Eclipsed)
                     {
                         // Dependency edge from the current node to the dependency
                         var innerEdge = new GraphEdge<RemoteResolveResult>(outerEdge, node.Item, dependency);
