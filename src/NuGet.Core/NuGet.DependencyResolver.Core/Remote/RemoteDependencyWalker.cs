@@ -188,6 +188,18 @@ namespace NuGet.DependencyResolver
                         result = (dependencyResult: DependencyResult.Cycle, conflictingDependency: dependency);
                     }
 
+                    if (result.dependencyResult != DependencyResult.Acceptable)
+                    {
+                        // In case of conflict because of a centrally managed version that is not direct dependency
+                        // the centrally managed package versions need to be added to the graph explicitelly as they are not added otherwise
+                        if (result.conflictingDependency != null &&
+                            result.conflictingDependency.VersionCentrallyManaged &&
+                            result.conflictingDependency.ReferenceType == LibraryDependencyReferenceType.None)
+                        {
+                            MarkCentralVersionForTransitiveProcessing(result.conflictingDependency, transitiveCentralPackageVersions, node);
+                        }
+                    }
+
                     if (result.dependencyResult == DependencyResult.Acceptable ||
                         result.dependencyResult == DependencyResult.PotentiallyEclipsed)
                     {
@@ -229,15 +241,6 @@ namespace NuGet.DependencyResolver
                     }
                     else
                     {
-                        // In case of conflict because of a centrally managed version that is not direct dependency
-                        // the centrally managed package versions need to be added to the graph explicitelly as they are not added otherwise
-                        if (result.conflictingDependency != null &&
-                            result.conflictingDependency.VersionCentrallyManaged &&
-                            result.conflictingDependency.ReferenceType == LibraryDependencyReferenceType.None)
-                        {
-                            MarkCentralVersionForTransitiveProcessing(result.conflictingDependency, transitiveCentralPackageVersions, node);
-                        }
-
                         // Keep the node in the tree if we need to look at it later
                         if (result.dependencyResult == DependencyResult.PotentiallyDowngraded ||
                             result.dependencyResult == DependencyResult.Cycle)

@@ -151,6 +151,27 @@ namespace NuGet.DependencyResolver
         {
             var workingDowngrades = RentDowngradesDictionary();
 
+            var nodesToRemove = new List<GraphNode<RemoteResolveResult>>();
+            foreach (var node in root.EnumerateAll().Where(x => x.Disposition == Disposition.PotentiallyEclipsed))
+            {
+                if (IsEclipsed(node))
+                {
+                    nodesToRemove.Add(node);
+                }
+                else
+                {
+                    node.Disposition = Disposition.Acceptable;
+                }
+            }
+
+            foreach (var nodeToRemove in nodesToRemove)
+            {
+                foreach (var outerNode in nodeToRemove.OuterNodes)
+                {
+                    outerNode.InnerNodes.Remove(nodeToRemove);
+                }
+            }
+
             foreach (var node in root.EnumerateAll())
             {
                 WalkTreeCheckCycleAndNearestWins(CreateState(cycles, workingDowngrades), node);
@@ -176,13 +197,57 @@ namespace NuGet.DependencyResolver
             ReleaseDowngradesDictionary(workingDowngrades);
         }
 
-        private static void WalkTreeCheckCycle(List<GraphNode<RemoteResolveResult>> cycles,
-            GraphNode<RemoteResolveResult> node)
+        private static bool IsEclipsed(GraphNode<RemoteResolveResult> node)
         {
-            if (node.Disposition != Disposition.Cycle)
-                return;
+            if (node.Disposition != Disposition.PotentiallyEclipsed)
+                return false;
 
-            cycles.Add(node);
+            var stack = new Stack<(GraphNode<RemoteResolveResult>, int)>();
+            stack.Push((node, 0));
+
+            while (stack.Count > 0)
+            {
+                var (currentNode, idx) = stack.Pop();
+
+                while (true)
+                {
+                    if (currentNode.OuterNodes.Count == 0)
+                    {
+                        return false;
+                    }
+
+                    if (idx >= currentNode.OuterNodes.Count)
+                        break;
+
+                    var outerNode = currentNode.OuterNodes[idx];
+                    var sideNodes = outerNode.InnerNodes;
+                    var count = sideNodes.Count;
+                    var eclipsed = false;
+                    for (var i = 0; i < count; i++)
+                    {
+                        var sideNode = sideNodes[i];
+
+                        if (sideNode != node && node.Key.IsEclipsedBy(sideNode.Key))
+                        {
+                            eclipsed = true;
+                            break;
+                        }
+                    }
+
+                    if (eclipsed)
+                    {
+                        idx++;
+                    }
+                    else
+                    {
+                        stack.Push((currentNode, idx + 1));
+                        currentNode = outerNode;
+                        idx = 0;
+                    }
+                }
+            }
+
+            return true;
         }
 
         private static void WalkTreeCheckCycleAndNearestWins(CyclesAndDowngrades context, GraphNode<RemoteResolveResult> node)
