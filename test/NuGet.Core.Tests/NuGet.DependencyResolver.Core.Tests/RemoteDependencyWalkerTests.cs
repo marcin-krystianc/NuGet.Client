@@ -2109,7 +2109,7 @@ namespace NuGet.DependencyResolver.Tests
             var result = node.Analyze();
 
             Assert.Equal(0, result.VersionConflicts.Count);
-            Assert.Equal(1, result.Downgrades.Count);
+            Assert.Equal(0, result.Downgrades.Count);
             Assert.Equal(0, result.Cycles.Count);
         }
 
