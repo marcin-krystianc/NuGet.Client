@@ -2069,11 +2069,11 @@ namespace NuGet.DependencyResolver.Tests
         }
 
         /// <summary>
-        ///       -> B 1.0 -> D 1.0 -> F 2.0
-        ///                -> F 3.0
+        ///       -> X 1.0 -> B 1.0 -> D 1.0 -> F 2.0
+        ///                         -> F 3.0
         /// A 1.0
-        ///       -> C 1.0 -> E 1.0 -> F 2.0
-        ///                -> F 1.0
+        ///       -> Y 1.0 -> B 2.0 -> E 1.0 -> F 2.0
+        ///                         -> F 1.0
         /// </summary>
         [Fact]
         public async Task TmpMy6()
@@ -2081,8 +2081,14 @@ namespace NuGet.DependencyResolver.Tests
             var context = new TestRemoteWalkContext();
             var provider = new DependencyProvider();
             provider.Package("A", "1.0")
-                .DependsOn("B", "1.0")
-                .DependsOn("C", "1.0");
+                .DependsOn("Y", "1.0")
+                .DependsOn("X", "1.0");
+
+            provider.Package("X", "1.0")
+                .DependsOn("B", "1.0");
+
+            provider.Package("Y", "1.0")
+                .DependsOn("B", "2.0");
 
             provider.Package("B", "1.0")
                 .DependsOn("D", "1.0")
@@ -2091,7 +2097,7 @@ namespace NuGet.DependencyResolver.Tests
             provider.Package("D", "1.0")
                 .DependsOn("F", "2.0");
 
-            provider.Package("C", "1.0")
+            provider.Package("B", "2.0")
                 .DependsOn("E", "1.0")
                 .DependsOn("F", "1.0");
 
@@ -2109,7 +2115,7 @@ namespace NuGet.DependencyResolver.Tests
             var result = node.Analyze();
 
             Assert.Equal(0, result.VersionConflicts.Count);
-            Assert.Equal(0, result.Downgrades.Count);
+            Assert.Equal(1, result.Downgrades.Count);
             Assert.Equal(0, result.Cycles.Count);
         }
 
