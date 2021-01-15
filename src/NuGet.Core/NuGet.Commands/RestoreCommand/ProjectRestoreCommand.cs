@@ -257,11 +257,11 @@ namespace NuGet.Commands
             var graphs = new List<GraphNode<RemoteResolveResult>>
             {
                 await walker.WalkAsync(
-                projectRange,
-                framework,
-                runtimeIdentifier,
-                runtimeGraph,
-                recursive: true)
+                    projectRange,
+                    framework,
+                    runtimeIdentifier,
+                    runtimeGraph,
+                    recursive: true)
             };
 
             // Resolve conflicts

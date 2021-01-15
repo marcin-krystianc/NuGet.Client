@@ -28,48 +28,52 @@ namespace NuGet.DependencyResolver
 
         public async Task<GraphNode<RemoteResolveResult>> WalkAsync(LibraryRange library, NuGetFramework framework, string runtimeIdentifier, RuntimeGraph runtimeGraph, bool recursive)
         {
-            var transitiveCentralPackageVersions = new TransitiveCentralPackageVersions();
-            var graphNodesCache =
-                new ConcurrentDictionary<LibraryRange, Lazy<Task<GraphNode<RemoteResolveResult>>>>();
-            var rootNode = await CreateGraphNode(
-                libraryRange: library,
-                framework: framework,
-                runtimeName: runtimeIdentifier,
-                runtimeGraph: runtimeGraph,
-                predicate: _ => (recursive ? DependencyResult.Acceptable : DependencyResult.PotentiallyEclipsed, null),
-                outerEdge: null,
-                transitiveCentralPackageVersions: transitiveCentralPackageVersions,
-                Disposition.Acceptable,
-                graphNodesCache);
-
-            // do not calculate the hashset of the direct dependencies for cases when there are not any elements in the transitiveCentralPackageVersions queue
-            var indexedDirectDependenciesKeyNames = new Lazy<HashSet<string>>(
-                () =>
-                {
-                    var result = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-                    result.AddRange(rootNode.InnerNodes.Select(n => n.Key.Name));
-                    return result;
-                });
-
-            var transitiveCentralPackageVersionNodes = new List<GraphNode<RemoteResolveResult>>();
-            while (transitiveCentralPackageVersions.TryTake(out LibraryDependency centralPackageVersionDependency))
+            //using (CallContextProfiler.NamedStep("WalkAsync"))
             {
-                // do not add a transitive dependency node if it is direct already
-                if (!indexedDirectDependenciesKeyNames.Value.Contains(centralPackageVersionDependency.Name))
+                var transitiveCentralPackageVersions = new TransitiveCentralPackageVersions();
+                var graphNodesCache =
+                    new ConcurrentDictionary<LibraryRange, Lazy<Task<GraphNode<RemoteResolveResult>>>>();
+                var rootNode = await CreateGraphNode(
+                    libraryRange: library,
+                    framework: framework,
+                    runtimeName: runtimeIdentifier,
+                    runtimeGraph: runtimeGraph,
+                    predicate: _ => (recursive ? DependencyResult.Acceptable : DependencyResult.PotentiallyEclipsed,
+                        null),
+                    outerEdge: null,
+                    transitiveCentralPackageVersions: transitiveCentralPackageVersions,
+                    Disposition.Acceptable,
+                    graphNodesCache);
+
+                // do not calculate the hashset of the direct dependencies for cases when there are not any elements in the transitiveCentralPackageVersions queue
+                var indexedDirectDependenciesKeyNames = new Lazy<HashSet<string>>(
+                    () =>
+                    {
+                        var result = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                        result.AddRange(rootNode.InnerNodes.Select(n => n.Key.Name));
+                        return result;
+                    });
+
+                var transitiveCentralPackageVersionNodes = new List<GraphNode<RemoteResolveResult>>();
+                while (transitiveCentralPackageVersions.TryTake(out LibraryDependency centralPackageVersionDependency))
                 {
-                    // as the nodes are created more parents can be added for a single central transitive node
-                    // keep the list of the nodes created and add the parents's references at the end
-                    // the parent references are needed to keep track of possible rejected parents
-                    transitiveCentralPackageVersionNodes.Add(await AddTransitiveCentralPackageVersionNodesAsync(
-                        rootNode, centralPackageVersionDependency, framework, runtimeIdentifier, runtimeGraph,
-                        transitiveCentralPackageVersions, graphNodesCache));
+                    // do not add a transitive dependency node if it is direct already
+                    if (!indexedDirectDependenciesKeyNames.Value.Contains(centralPackageVersionDependency.Name))
+                    {
+                        // as the nodes are created more parents can be added for a single central transitive node
+                        // keep the list of the nodes created and add the parents's references at the end
+                        // the parent references are needed to keep track of possible rejected parents
+                        transitiveCentralPackageVersionNodes.Add(await AddTransitiveCentralPackageVersionNodesAsync(
+                            rootNode, centralPackageVersionDependency, framework, runtimeIdentifier, runtimeGraph,
+                            transitiveCentralPackageVersions, graphNodesCache));
+                    }
                 }
+
+                transitiveCentralPackageVersionNodes.ForEach(node =>
+                    transitiveCentralPackageVersions.AddParentsToNode(node));
+
+                return rootNode;
             }
-
-            transitiveCentralPackageVersionNodes.ForEach(node =>
-                transitiveCentralPackageVersions.AddParentsToNode(node));
-
-            return rootNode;
         }
 
         private async Task<GraphNode<RemoteResolveResult>> CreateGraphNode(
@@ -224,7 +228,7 @@ namespace NuGet.DependencyResolver
                                 graphNodesCache)));
 
                         // disable concurrency
-                        await nodeTask.Value;
+                        //await nodeTask.Value;
                         tasks.Add(nodeTask.Value);
 /*
                         var nodeTask = CreateGraphNode(

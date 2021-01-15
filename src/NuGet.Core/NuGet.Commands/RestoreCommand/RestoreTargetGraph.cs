@@ -113,65 +113,65 @@ namespace NuGet.Commands
                 analyzeResult.Combine(result);
             }
 
-            graphs.ForEach(node =>
+            foreach (var node in graphs.SelectMany(x => x.EnumerateAll()))
+            {
+                if (node == null || node.Key == null)
                 {
-                    if (node == null || node.Key == null)
-                    {
-                        return;
-                    }
+                    break;
+                }
 
-                    if (node.Disposition != Disposition.Rejected)
+                if (node.Disposition != Disposition.Rejected)
+                {
+                    if (node.Disposition == Disposition.Acceptable)
                     {
-                        if (node.Disposition == Disposition.Acceptable)
+                        // This wasn't resolved. It's a conflict.
+                        HashSet<ResolverRequest> ranges;
+                        if (!conflicts.TryGetValue(node.Key.Name, out ranges))
                         {
-                            // This wasn't resolved. It's a conflict.
-                            HashSet<ResolverRequest> ranges;
-                            if (!conflicts.TryGetValue(node.Key.Name, out ranges))
-                            {
-                                ranges = new HashSet<ResolverRequest>();
-                                conflicts[node.Key.Name] = ranges;
-                            }
-
-                            // OuterNode may be null if the project itself conflicts with a package name
-                            var requestor = node.OuterNodes.FirstOrDefault()?.Item.Key ?? node.Item.Key;
-
-                            ranges.Add(new ResolverRequest(requestor, node.Key));
+                            ranges = new HashSet<ResolverRequest>();
+                            conflicts[node.Key.Name] = ranges;
                         }
 
-                        if (node?.Item?.Key?.Type == LibraryType.Unresolved)
-                        {
-                            if (node.Key.VersionRange != null)
-                            {
-                                unresolved.Add(node.Key);
-                            }
+                        // OuterNode may be null if the project itself conflicts with a package name
+                        var requestor = node.OuterNodes.FirstOrDefault()?.Item.Key ?? node.Item.Key;
 
-                            return;
+                        ranges.Add(new ResolverRequest(requestor, node.Key));
+                    }
+
+                    if (node?.Item?.Key?.Type == LibraryType.Unresolved)
+                    {
+                        if (node.Key.VersionRange != null)
+                        {
+                            unresolved.Add(node.Key);
                         }
 
-                        // Don't add rejected nodes since we only want to write reduced nodes
-                        // to the lock file
-                        flattened.Add(node.Item);
+                        break;
                     }
 
-                    if (node?.OuterNodes.FirstOrDefault() != null && node.Item.Key.Type != LibraryType.Unresolved)
-                    {
-                        var dependencyKey = new ResolvedDependencyKey(
-                            parent: node.OuterNodes.First().Item.Key,
-                            range: node.Key.VersionRange,
-                            child: node.Item.Key);
+                    // Don't add rejected nodes since we only want to write reduced nodes
+                    // to the lock file
+                    flattened.Add(node.Item);
+                }
 
-                        resolvedDependencies.Add(dependencyKey);
-                    }
+                if (node?.OuterNodes.FirstOrDefault() != null && node.Item.Key.Type != LibraryType.Unresolved)
+                {
+                    var dependencyKey = new ResolvedDependencyKey(
+                        parent: node.OuterNodes.First().Item.Key,
+                        range: node.Key.VersionRange,
+                        child: node.Item.Key);
 
-                    // If the package came from a remote library provider, it needs to be installed locally
-                    // Rejected nodes are included here to avoid downloading them from remote sources
-                    // each time the lock file is generated.
-                    var isRemote = context.RemoteLibraryProviders.Contains(node.Item.Data.Match.Provider);
-                    if (isRemote)
-                    {
-                        install.Add(node.Item.Data.Match);
-                    }
-                });
+                    resolvedDependencies.Add(dependencyKey);
+                }
+
+                // If the package came from a remote library provider, it needs to be installed locally
+                // Rejected nodes are included here to avoid downloading them from remote sources
+                // each time the lock file is generated.
+                var isRemote = context.RemoteLibraryProviders.Contains(node.Item.Data.Match.Provider);
+                if (isRemote)
+                {
+                    install.Add(node.Item.Data.Match);
+                }
+            }
 
             return new RestoreTargetGraph(
                 conflicts.Select(p => new ResolverConflict(p.Key, p.Value)),

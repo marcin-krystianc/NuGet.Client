@@ -18,129 +18,17 @@ namespace NuGet.DependencyResolver
 
         public static AnalyzeResult<RemoteResolveResult> Analyze(this GraphNode<RemoteResolveResult> root)
         {
-            var result = new AnalyzeResult<RemoteResolveResult>();
-
-            root.CheckCycleAndNearestWins(result.Downgrades, result.Cycles);
-            root.TryResolveConflicts(result.VersionConflicts);
-
-            // Remove all downgrades that didn't result in selecting the node we actually downgraded to
-            result.Downgrades.RemoveAll(d => d.DowngradedTo.Disposition != Disposition.Accepted);
-
-            return result;
-        }
-
-        // Verifies if minimum version specification for nearVersion is greater than the
-        // minimum version specification for farVersion
-        public static bool IsGreaterThanOrEqualTo(VersionRange nearVersion, VersionRange farVersion)
-        {
-            if (!nearVersion.HasLowerBound)
+            //using (CallContextProfiler.NamedStep("Analyze"))
             {
-                return true;
-            }
-            else if (!farVersion.HasLowerBound)
-            {
-                return false;
-            }
-            else if (nearVersion.IsFloating || farVersion.IsFloating)
-            {
-                NuGetVersion nearMinVersion;
-                NuGetVersion farMinVersion;
+                var result = new AnalyzeResult<RemoteResolveResult>();
 
-                string nearRelease;
-                string farRelease;
+                root.CheckCycleAndNearestWins(result.Downgrades, result.Cycles);
+                root.TryResolveConflicts(result.VersionConflicts);
 
-                if (nearVersion.IsFloating)
-                {
-                    if (nearVersion.Float.FloatBehavior == NuGetVersionFloatBehavior.Major)
-                    {
-                        // nearVersion: "*"
-                        return true;
-                    }
+                // Remove all downgrades that didn't result in selecting the node we actually downgraded to
+                result.Downgrades.RemoveAll(d => d.DowngradedTo.Disposition != Disposition.Accepted);
 
-                    nearMinVersion = GetReleaseLabelFreeVersion(nearVersion);
-                    nearRelease = nearVersion.Float.OriginalReleasePrefix;
-                }
-                else
-                {
-                    nearMinVersion = nearVersion.MinVersion;
-                    nearRelease = nearVersion.MinVersion.Release;
-                }
-
-                if (farVersion.IsFloating)
-                {
-                    if (farVersion.Float.FloatBehavior == NuGetVersionFloatBehavior.Major)
-                    {
-                        // farVersion: "*"
-                        return false;
-                    }
-
-                    farMinVersion = GetReleaseLabelFreeVersion(farVersion);
-                    farRelease = farVersion.Float.OriginalReleasePrefix;
-                }
-                else
-                {
-                    farMinVersion = farVersion.MinVersion;
-                    farRelease = farVersion.MinVersion.Release;
-                }
-
-                var result = nearMinVersion.CompareTo(farMinVersion, VersionComparison.Version);
-                if (result != 0)
-                {
-                    return result > 0;
-                }
-
-                if (string.IsNullOrEmpty(nearRelease))
-                {
-                    // near is 1.0.0-*
-                    return true;
-                }
-                else if (string.IsNullOrEmpty(farRelease))
-                {
-                    // near is 1.0.0-alpha-* and far is 1.0.0-*
-                    return false;
-                }
-                else
-                {
-                    var lengthToCompare = Math.Min(nearRelease.Length, farRelease.Length);
-
-                    return StringComparer.OrdinalIgnoreCase.Compare(
-                        nearRelease.Substring(0, lengthToCompare),
-                        farRelease.Substring(0, lengthToCompare)) >= 0;
-                }
-            }
-
-            return nearVersion.MinVersion >= farVersion.MinVersion;
-        }
-
-        private static NuGetVersion GetReleaseLabelFreeVersion(VersionRange versionRange)
-        {
-            if (versionRange.Float.FloatBehavior == NuGetVersionFloatBehavior.Major)
-            {
-                return new NuGetVersion(int.MaxValue, int.MaxValue, int.MaxValue);
-            }
-            else if (versionRange.Float.FloatBehavior == NuGetVersionFloatBehavior.Minor)
-            {
-                return new NuGetVersion(versionRange.MinVersion.Major, int.MaxValue, int.MaxValue, int.MaxValue);
-            }
-            else if (versionRange.Float.FloatBehavior == NuGetVersionFloatBehavior.Patch)
-            {
-                return new NuGetVersion(versionRange.MinVersion.Major, versionRange.MinVersion.Minor, int.MaxValue, int.MaxValue);
-            }
-            else if (versionRange.Float.FloatBehavior == NuGetVersionFloatBehavior.Revision)
-            {
-                return new NuGetVersion(
-                    versionRange.MinVersion.Major,
-                    versionRange.MinVersion.Minor,
-                    versionRange.MinVersion.Patch,
-                    int.MaxValue);
-            }
-            else
-            {
-                return new NuGetVersion(
-                    versionRange.MinVersion.Major,
-                    versionRange.MinVersion.Minor,
-                    versionRange.MinVersion.Patch,
-                    versionRange.MinVersion.Revision);
+                return result;
             }
         }
 
@@ -151,12 +39,12 @@ namespace NuGet.DependencyResolver
         {
             var workingDowngrades = RentDowngradesDictionary();
 
-            var nodesToRemove = new List<GraphNode<RemoteResolveResult>>();
+            var nodesToRemove = new Queue<GraphNode<RemoteResolveResult>>();
             foreach (var node in root.EnumerateAll().Where(x => x.Disposition == Disposition.PotentiallyEclipsed))
             {
                 if (IsEclipsed(node))
                 {
-                    nodesToRemove.Add(node);
+                    nodesToRemove.Enqueue(node);
                 }
                 else
                 {
@@ -171,8 +59,10 @@ namespace NuGet.DependencyResolver
                     .ToList();
             }
 
-            foreach (var nodeToRemove in nodesToRemove)
+            while (nodesToRemove.Any())
             {
+                var nodeToRemove = nodesToRemove.Dequeue();
+
                 foreach (var outerNode in nodeToRemove.OuterNodes)
                 {
                     outerNode.InnerNodes.Remove(nodeToRemove);
@@ -181,6 +71,15 @@ namespace NuGet.DependencyResolver
                 foreach (var innerNode in nodeToRemove.InnerNodes)
                 {
                     innerNode.OuterNodes.Remove(nodeToRemove);
+                    if (innerNode.OuterNodes.Count == 0)
+                        nodesToRemove.Enqueue(innerNode);
+                }
+            }
+
+            foreach (var node in root.EnumerateAll())
+            {
+                if (nodesToRemove.Contains(node))
+                {
                 }
             }
 
@@ -211,55 +110,65 @@ namespace NuGet.DependencyResolver
 
         private static bool IsEclipsed(GraphNode<RemoteResolveResult> node)
         {
-            if (node.Disposition != Disposition.PotentiallyEclipsed)
-                return false;
-
-            var stack = new Stack<(GraphNode<RemoteResolveResult>, int)>();
-            stack.Push((node, 0));
-
-            while (stack.Count > 0)
+            //using (CallContextProfiler.NamedStep("IsEclipsed"))
             {
-                var (currentNode, idx) = stack.Pop();
+                if (node.Disposition != Disposition.PotentiallyEclipsed)
+                    return false;
 
-                while (true)
+                var visitedNodes = new HashSet<GraphNode<RemoteResolveResult>>();
+                var stack = new Stack<(GraphNode<RemoteResolveResult>, int)>();
+                stack.Push((node, 0));
+
+                while (stack.Count > 0)
                 {
-                    if (currentNode.OuterNodes.Count == 0)
+                    var (currentNode, idx) = stack.Pop();
+
+                    while (true)
                     {
-                        return false;
-                    }
-
-                    if (idx >= currentNode.OuterNodes.Count)
-                        break;
-
-                    var outerNode = currentNode.OuterNodes[idx];
-                    var sideNodes = outerNode.InnerNodes;
-                    var count = sideNodes.Count;
-                    var eclipsed = false;
-                    for (var i = 0; i < count; i++)
-                    {
-                        var sideNode = sideNodes[i];
-
-                        if (sideNode != node && node.Key.IsEclipsedBy(sideNode.Key))
+                        if (currentNode.OuterNodes.Count == 0)
                         {
-                            eclipsed = true;
+                            return false;
+                        }
+
+                        if (idx >= currentNode.OuterNodes.Count)
                             break;
+
+                        var outerNode = currentNode.OuterNodes[idx];
+                        if (!visitedNodes.Add(outerNode))
+                        {
+                            idx++;
+                            continue;
+                        }
+
+                        var sideNodes = outerNode.InnerNodes;
+                        var count = sideNodes.Count;
+                        var eclipsed = false;
+                        for (var i = 0; i < count; i++)
+                        {
+                            var sideNode = sideNodes[i];
+
+                            if (sideNode != node && node.Key.IsEclipsedBy(sideNode.Key))
+                            {
+                                eclipsed = true;
+                                break;
+                            }
+                        }
+
+                        if (eclipsed)
+                        {
+                            idx++;
+                        }
+                        else
+                        {
+                            stack.Push((currentNode, idx + 1));
+                            currentNode = outerNode;
+                            idx = 0;
                         }
                     }
-
-                    if (eclipsed)
-                    {
-                        idx++;
-                    }
-                    else
-                    {
-                        stack.Push((currentNode, idx + 1));
-                        currentNode = outerNode;
-                        idx = 0;
-                    }
                 }
-            }
 
-            return true;
+                return true;
+            }
         }
 
         private static void WalkTreeCheckCycleAndNearestWins(CyclesAndDowngrades context, GraphNode<RemoteResolveResult> node)
@@ -588,6 +497,16 @@ namespace NuGet.DependencyResolver
 
                 incomplete = root.EnumerateAll().Any(x => x.Disposition == Disposition.Acceptable);
 
+                if (incomplete && patience == 1)
+                {
+                    foreach (var node in root.EnumerateAll())
+                    {
+                        if (node.Disposition == Disposition.Acceptable)
+                        {
+                        }
+                    }
+                }
+
                 tracker.Clear();
             }
 
@@ -724,7 +643,7 @@ namespace NuGet.DependencyResolver
             Cache<TItem>.ReleaseQueue(queue);
         }
 
-        internal static IEnumerable<GraphNode<TItem>> EnumerateAll<TItem>(this GraphNode<TItem> root)
+        public static IEnumerable<GraphNode<TItem>> EnumerateAll<TItem>(this GraphNode<TItem> root)
         {
             var queue = Cache<TItem>.RentQueue();
             var visitedNodes = new HashSet<GraphNode<TItem>>();
