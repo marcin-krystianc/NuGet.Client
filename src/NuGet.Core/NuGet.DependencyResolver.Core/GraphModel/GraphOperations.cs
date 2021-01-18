@@ -38,6 +38,7 @@ namespace NuGet.DependencyResolver
             List<GraphNode<RemoteResolveResult>> cycles)
         {
             var workingDowngrades = RentDowngradesDictionary();
+            /*
 
             var nodesToRemove = new Queue<GraphNode<RemoteResolveResult>>();
             foreach (var node in root.EnumerateAll().Where(x => x.Disposition == Disposition.PotentiallyEclipsed))
@@ -82,7 +83,7 @@ namespace NuGet.DependencyResolver
                 {
                 }
             }
-
+*/
             foreach (var node in root.EnumerateAll())
             {
                 WalkTreeCheckCycleAndNearestWins(CreateState(cycles, workingDowngrades), node);
@@ -466,28 +467,21 @@ namespace NuGet.DependencyResolver
             var incomplete = true;
 
             var tracker = Cache<TItem>.RentTracker();
+            foreach (var node in root.EnumerateAll())
+            {
+                tracker.Track(node);
+            }
 
             var centralTransitiveNodes = root.InnerNodes.Where(n => n.Item.IsCentralTransitive).ToList();
             var hasCentralTransitiveDependencies = centralTransitiveNodes.Count > 0;
 
             while (incomplete && --patience != 0)
             {
-                // Create a picture of what has not been rejected yet
-                foreach (var node in root.EnumerateAllInTopologicalOrder())
-                {
-                    WalkTreeRejectNodesOfRejectedNodes(node, tracker);
-                }
-
                 if (hasCentralTransitiveDependencies)
                 {
                     // Some of the central transitive nodes may be rejected now because their parents were rejected
                     // Reject them accordingly
                     root.RejectCentralTransitiveBecauseOfRejectedParents(tracker, centralTransitiveNodes);
-                }
-
-                foreach (var node in root.EnumerateAll().Where(x => x.Disposition != Disposition.Rejected))
-                {
-                    tracker.Track(node.Item);
                 }
 
                 foreach (var node in root.EnumerateAllInTopologicalOrder())
@@ -496,18 +490,6 @@ namespace NuGet.DependencyResolver
                 }
 
                 incomplete = root.EnumerateAll().Any(x => x.Disposition == Disposition.Acceptable);
-
-                if (incomplete && patience == 1)
-                {
-                    foreach (var node in root.EnumerateAll())
-                    {
-                        if (node.Disposition == Disposition.Acceptable)
-                        {
-                        }
-                    }
-                }
-
-                tracker.Clear();
             }
 
             Cache<TItem>.ReleaseTracker(tracker);
@@ -575,34 +557,51 @@ namespace NuGet.DependencyResolver
             }
         }
 
-        private static bool WalkTreeAcceptOrRejectNodes<TItem>(GraphNode<TItem> node, TrackerAndAccepted<TItem> context)
+        private static void WalkTreeAcceptOrRejectNodes<TItem>(GraphNode<TItem> node, TrackerAndAccepted<TItem> context)
         {
             var tracker = context.Tracker;
             var acceptedLibraries = context.AcceptedLibraries;
 
             if (node.ParentNodes.Count > 0 && node.ParentNodes.All(x => x.Disposition != Disposition.Accepted))
             {
-                return false;
+                return;
             }
-            else if (node.OuterNodes.Count > 0 && node.OuterNodes.All(x => x.Disposition != Disposition.Accepted))
+
+            if (node.OuterNodes.Count > 0)
             {
-                return false;
+                if (node.OuterNodes.All(x => x.Disposition == Disposition.Rejected))
+                {
+                    node.Disposition = Disposition.Rejected;
+                    return;
+                }
+
+                if (node.OuterNodes.All(x => x.Disposition != Disposition.Accepted))
+                {
+                    return;
+                }
+            }
+
+            if (node.Disposition == Disposition.PotentiallyDowngraded)
+            {
+                node.Disposition = Disposition.Acceptable;
+            }
+            else if (node.Disposition == Disposition.PotentiallyEclipsed)
+            {
+                node.Disposition = Disposition.Acceptable;
             }
 
             if (node.Disposition == Disposition.Acceptable)
             {
-                if (tracker.IsBestVersion(node.Item))
+                if (tracker.IsBestVersion(node))
                 {
                     node.Disposition = Disposition.Accepted;
                     acceptedLibraries[node.Key.Name] = node;
                 }
-                else
+                else if (tracker.IsAnyVersionAccepted(node))
                 {
                     node.Disposition = Disposition.Rejected;
                 }
             }
-
-            return node.Disposition == Disposition.Accepted;
         }
 
         public static void ForEach<TItem>(this IEnumerable<GraphNode<TItem>> roots, Action<GraphNode<TItem>> visitor)

@@ -228,7 +228,7 @@ namespace NuGet.DependencyResolver
                                 graphNodesCache)));
 
                         // disable concurrency
-                        //await nodeTask.Value;
+                        await nodeTask.Value;
                         tasks.Add(nodeTask.Value);
 /*
                         var nodeTask = CreateGraphNode(

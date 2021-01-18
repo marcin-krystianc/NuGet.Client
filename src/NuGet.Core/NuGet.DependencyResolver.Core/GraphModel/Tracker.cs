@@ -3,6 +3,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.Linq;
 
 namespace NuGet.DependencyResolver
 {
@@ -11,7 +12,7 @@ namespace NuGet.DependencyResolver
         private readonly Dictionary<string, Entry> _entries
             = new Dictionary<string, Entry>(StringComparer.OrdinalIgnoreCase);
 
-        public void Track(GraphItem<TItem> item)
+        public void Track(GraphNode<TItem> item)
         {
             var entry = GetEntry(item);
             if (!entry.List.Contains(item))
@@ -20,15 +21,15 @@ namespace NuGet.DependencyResolver
             }
         }
 
-        public bool IsBestVersion(GraphItem<TItem> item)
+        public bool IsBestVersion(GraphNode<TItem> item)
         {
             var entry = GetEntry(item);
 
-            var version = item.Key.Version;
+            var version = item.Item.Key.Version;
 
-            foreach (var known in entry.List)
+            foreach (var known in entry.List.Where(x => x.Disposition != Disposition.Rejected))
             {
-                if (version < known.Key.Version)
+                if (version < known.Item.Key.Version)
                 {
                     return false;
                 }
@@ -37,12 +38,18 @@ namespace NuGet.DependencyResolver
             return true;
         }
 
+        public bool IsAnyVersionAccepted(GraphNode<TItem> item)
+        {
+            var entry = GetEntry(item);
+            return entry.List.Any(x => x.Disposition == Disposition.Accepted);
+        }
+
         internal void Clear()
         {
             _entries.Clear();
         }
 
-        private Entry GetEntry(GraphItem<TItem> item)
+        private Entry GetEntry(GraphNode<TItem> item)
         {
             Entry itemList;
             if (!_entries.TryGetValue(item.Key.Name, out itemList))
@@ -57,10 +64,10 @@ namespace NuGet.DependencyResolver
         {
             public Entry()
             {
-                List = new HashSet<GraphItem<TItem>>();
+                List = new HashSet<GraphNode<TItem>>();
             }
 
-            public HashSet<GraphItem<TItem>> List { get; set; }
+            public HashSet<GraphNode<TItem>> List { get; set; }
         }
     }
 }
