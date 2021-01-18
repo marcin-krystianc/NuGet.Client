@@ -22,8 +22,7 @@ namespace NuGet.DependencyResolver
             {
                 var result = new AnalyzeResult<RemoteResolveResult>();
 
-                root.CheckCycleAndNearestWins(result.Downgrades, result.Cycles);
-                root.TryResolveConflicts(result.VersionConflicts);
+                root.TryResolveConflicts(result.VersionConflicts, result.Cycles, result.Downgrades);
 
                 // Remove all downgrades that didn't result in selecting the node we actually downgraded to
                 result.Downgrades.RemoveAll(d => d.DowngradedTo.Disposition != Disposition.Accepted);
@@ -32,37 +31,15 @@ namespace NuGet.DependencyResolver
             }
         }
 
-        private static void CheckCycleAndNearestWins(
-            this GraphNode<RemoteResolveResult> root,
-            List<DowngradeResult<RemoteResolveResult>> downgrades,
-            List<GraphNode<RemoteResolveResult>> cycles)
+        private static void RemoveNode<TItem>(GraphNode<TItem> node, Tracker<TItem> tracker)
         {
-            var workingDowngrades = RentDowngradesDictionary();
-            /*
-
-            var nodesToRemove = new Queue<GraphNode<RemoteResolveResult>>();
-            foreach (var node in root.EnumerateAll().Where(x => x.Disposition == Disposition.PotentiallyEclipsed))
-            {
-                if (IsEclipsed(node))
-                {
-                    nodesToRemove.Enqueue(node);
-                }
-                else
-                {
-                    node.Disposition = Disposition.Acceptable;
-                }
-            }
-
-            foreach (var node in root.EnumerateAll())
-            {
-                node.ParentNodes = node.ParentNodes
-                    .Where(x => x.Disposition != Disposition.PotentiallyEclipsed)
-                    .ToList();
-            }
+            var nodesToRemove = new Queue<GraphNode<TItem>>();
+            nodesToRemove.Enqueue(node);
 
             while (nodesToRemove.Any())
             {
                 var nodeToRemove = nodesToRemove.Dequeue();
+                tracker.Remove(nodeToRemove);
 
                 foreach (var outerNode in nodeToRemove.OuterNodes)
                 {
@@ -76,48 +53,17 @@ namespace NuGet.DependencyResolver
                         nodesToRemove.Enqueue(innerNode);
                 }
             }
-
-            foreach (var node in root.EnumerateAll())
-            {
-                if (nodesToRemove.Contains(node))
-                {
-                }
-            }
-*/
-            foreach (var node in root.EnumerateAll())
-            {
-                WalkTreeCheckCycleAndNearestWins(CreateState(cycles, workingDowngrades), node);
-            }
-
-#if IS_DESKTOP || NETSTANDARD2_0
-            // Increase List size for items to be added, if too small
-            var requiredCapacity = downgrades.Count + workingDowngrades.Count;
-            if (downgrades.Capacity < requiredCapacity)
-            {
-                downgrades.Capacity = requiredCapacity;
-            }
-#endif
-            foreach (var p in workingDowngrades)
-            {
-                downgrades.Add(new DowngradeResult<RemoteResolveResult>
-                {
-                    DowngradedFrom = p.Key,
-                    DowngradedTo = p.Value
-                });
-            }
-
-            ReleaseDowngradesDictionary(workingDowngrades);
         }
 
-        private static bool IsEclipsed(GraphNode<RemoteResolveResult> node)
+        private static bool IsEclipsed<TItem>(GraphNode<TItem> node)
         {
             //using (CallContextProfiler.NamedStep("IsEclipsed"))
             {
                 if (node.Disposition != Disposition.PotentiallyEclipsed)
                     return false;
 
-                var visitedNodes = new HashSet<GraphNode<RemoteResolveResult>>();
-                var stack = new Stack<(GraphNode<RemoteResolveResult>, int)>();
+                var visitedNodes = new HashSet<GraphNode<TItem>>();
+                var stack = new Stack<(GraphNode<TItem>, int)>();
                 stack.Push((node, 0));
 
                 while (stack.Count > 0)
@@ -172,7 +118,7 @@ namespace NuGet.DependencyResolver
             }
         }
 
-        private static void WalkTreeCheckCycleAndNearestWins(CyclesAndDowngrades context, GraphNode<RemoteResolveResult> node)
+        private static void WalkTreeCheckDowngrades(GraphNode<RemoteResolveResult> node, Dictionary<GraphNode<RemoteResolveResult>, GraphNode<RemoteResolveResult>> workingDowngrades)
         {
             // Cycle:
             //
@@ -195,28 +141,6 @@ namespace NuGet.DependencyResolver
             //
             //   A -> B -> C 2.0
             //     -> C 1.0
-
-            var cycles = context.Cycles;
-            var workingDowngrades = context.Downgrades;
-
-            if (node.Disposition == Disposition.Cycle)
-            {
-                cycles.Add(node);
-
-                // Remove this node from the tree so the nothing else evaluates this.
-                // This is ok since we have a parent pointer and we can still print the path
-                foreach (var outerNode in node.OuterNodes)
-                {
-                    outerNode.InnerNodes.Remove(node);
-                }
-
-                return;
-            }
-
-            if (node.Disposition != Disposition.PotentiallyDowngraded)
-            {
-                return;
-            }
 
             var stack = new Stack<(GraphNode<RemoteResolveResult>, int, bool)>();
             stack.Push((node, 0, false));
@@ -455,16 +379,22 @@ namespace NuGet.DependencyResolver
             return node.Key.TypeConstraintAllowsAnyOf(LibraryDependencyTarget.Package);
         }
 
-        private static bool TryResolveConflicts<TItem>(this GraphNode<TItem> root, List<VersionConflictResult<TItem>> versionConflicts)
+        private static void TryResolveConflicts<TItem>(this GraphNode<TItem> root, List<VersionConflictResult<TItem>> versionConflicts, List<GraphNode<TItem>> cycles, List<DowngradeResult<TItem>> downgrades)
         {
             // now we walk the tree as often as it takes to determine
             // which paths are accepted or rejected, based on conflicts occuring
             // between cousin packages
 
             var acceptedLibraries = Cache<TItem>.RentDictionary();
+            var workingDowngrades = new Dictionary<GraphNode<TItem>, GraphNode<TItem>>();
 
             var patience = 1000;
             var incomplete = true;
+
+            foreach (var node in root.EnumerateAllInTopologicalOrder().Where(x => x.Disposition == Disposition.Cycle))
+            {
+                cycles.Add(node);
+            }
 
             var tracker = Cache<TItem>.RentTracker();
             foreach (var node in root.EnumerateAll())
@@ -486,22 +416,28 @@ namespace NuGet.DependencyResolver
 
                 foreach (var node in root.EnumerateAllInTopologicalOrder())
                 {
-                    WalkTreeAcceptOrRejectNodes(node, CreateState(tracker, acceptedLibraries));
+                    WalkTreeAcceptOrRejectNodes(node, tracker, acceptedLibraries, workingDowngrades);
                 }
 
                 incomplete = root.EnumerateAll().Any(x => x.Disposition == Disposition.Acceptable);
             }
 
-            Cache<TItem>.ReleaseTracker(tracker);
+            foreach (var p in workingDowngrades)
+            {
+                downgrades.Add(new DowngradeResult<TItem>
+                {
+                    DowngradedFrom = p.Key,
+                    DowngradedTo = p.Value
+                });
+            }
 
             foreach (var node in root.EnumerateAll())
             {
                 WalkTreeDectectConflicts(node, versionConflicts, acceptedLibraries);
             }
 
+            Cache<TItem>.ReleaseTracker(tracker);
             Cache<TItem>.ReleaseDictionary(acceptedLibraries);
-
-            return !incomplete;
         }
 
         private static void WalkTreeDectectConflicts<TItem>(GraphNode<TItem> node,  List<VersionConflictResult<TItem>> versionConflicts, Dictionary<string, GraphNode<TItem>> acceptedLibraries)
@@ -548,20 +484,8 @@ namespace NuGet.DependencyResolver
             }
         }
 
-        private static void WalkTreeRejectNodesOfRejectedNodes<TItem>(GraphNode<TItem> node, Tracker<TItem> context)
+        private static void WalkTreeAcceptOrRejectNodes<TItem>(GraphNode<TItem> node, Tracker<TItem> tracker, Dictionary<string, GraphNode<TItem>> acceptedLibraries, Dictionary<GraphNode<TItem>, GraphNode<TItem>> workingDowngrades)
         {
-            if (node.OuterNodes.Count > 0 && node.OuterNodes.All(x=>x.Disposition == Disposition.Rejected))
-            {
-                // Mark all nodes as rejected if they aren't already marked
-                node.Disposition = Disposition.Rejected;
-            }
-        }
-
-        private static void WalkTreeAcceptOrRejectNodes<TItem>(GraphNode<TItem> node, TrackerAndAccepted<TItem> context)
-        {
-            var tracker = context.Tracker;
-            var acceptedLibraries = context.AcceptedLibraries;
-
             if (node.ParentNodes.Count > 0 && node.ParentNodes.All(x => x.Disposition != Disposition.Accepted))
             {
                 return;
@@ -583,11 +507,20 @@ namespace NuGet.DependencyResolver
 
             if (node.Disposition == Disposition.PotentiallyDowngraded)
             {
-                node.Disposition = Disposition.Acceptable;
+                WalkTreeCheckDowngrades(node, workingDowngrades);
             }
             else if (node.Disposition == Disposition.PotentiallyEclipsed)
             {
-                node.Disposition = Disposition.Acceptable;
+                if (IsEclipsed(node))
+                {
+                    node.Disposition = Disposition.Rejected;
+                    RemoveNode(node, tracker);
+                }
+                else
+                {
+                    node.Disposition = Disposition.Acceptable;
+                }
+
             }
 
             if (node.Disposition == Disposition.Acceptable)
@@ -714,30 +647,6 @@ namespace NuGet.DependencyResolver
             }
         }
 
-        [ThreadStatic]
-        private static Dictionary<GraphNode<RemoteResolveResult>, GraphNode<RemoteResolveResult>> _tempDowngrades;
-
-        public static Dictionary<GraphNode<RemoteResolveResult>, GraphNode<RemoteResolveResult>> RentDowngradesDictionary()
-        {
-            var dictionary = _tempDowngrades;
-            if (dictionary != null)
-            {
-                _tempDowngrades = null;
-                return dictionary;
-            }
-
-            return new Dictionary<GraphNode<RemoteResolveResult>, GraphNode<RemoteResolveResult>>();
-        }
-
-        public static void ReleaseDowngradesDictionary(Dictionary<GraphNode<RemoteResolveResult>, GraphNode<RemoteResolveResult>> dictionary)
-        {
-            if (_tempDowngrades == null)
-            {
-                dictionary.Clear();
-                _tempDowngrades = dictionary;
-            }
-        }
-
         private static class Cache<TItem>
         {
             [ThreadStatic]
@@ -809,36 +718,6 @@ namespace NuGet.DependencyResolver
                     _dictionary = dictionary;
                 }
             }
-        }
-
-        private struct TrackerAndAccepted<TItem>
-        {
-            public Tracker<TItem> Tracker;
-            public Dictionary<string, GraphNode<TItem>> AcceptedLibraries;
-        }
-
-        private static TrackerAndAccepted<TItem> CreateState<TItem>(Tracker<TItem> tracker, Dictionary<string, GraphNode<TItem>> acceptedLibraries)
-        {
-            return new TrackerAndAccepted<TItem>
-            {
-                Tracker = tracker,
-                AcceptedLibraries = acceptedLibraries
-            };
-        }
-
-        private struct CyclesAndDowngrades
-        {
-            public List<GraphNode<RemoteResolveResult>> Cycles;
-            public Dictionary<GraphNode<RemoteResolveResult>, GraphNode<RemoteResolveResult>> Downgrades;
-        }
-
-        private static CyclesAndDowngrades CreateState(List<GraphNode<RemoteResolveResult>> cycles, Dictionary<GraphNode<RemoteResolveResult>, GraphNode<RemoteResolveResult>> downgrades)
-        {
-            return new CyclesAndDowngrades
-            {
-                Cycles = cycles,
-                Downgrades = downgrades
-            };
         }
 
         private static void RejectCentralTransitiveBecauseOfRejectedParents<TItem>(this GraphNode<TItem> root, Tracker<TItem> tracker, List<GraphNode<TItem>> centralTransitiveNodes)

@@ -1978,8 +1978,8 @@ namespace NuGet.DependencyResolver.Tests
             Assert.Equal(0, result.VersionConflicts.Count);
             Assert.Equal(0, result.Downgrades.Count);
             Assert.Equal(0, result.Cycles.Count);
-            Assert.Equal(0, node.EnumerateAll().Count(x => x.Disposition == Disposition.Acceptable));
-            Assert.Equal(4, node.EnumerateAll().Count(x => x.Disposition == Disposition.Rejected));
+            Assert.Equal(4, node.EnumerateAll().Count(x => x.Disposition == Disposition.Acceptable));
+            Assert.Equal(0, node.EnumerateAll().Count(x => x.Disposition == Disposition.Rejected));
         }
 
         /// <summary>
@@ -2025,10 +2025,10 @@ namespace NuGet.DependencyResolver.Tests
         }
 
         /// <summary>
-        /// A 1.0 -> C 1.0 -> D 1.0 -> E [1.0]
+        /// A 1.0 -> F 1.0 -> B 1.0 -> E [2.0]
+        ///       -> C 1.0 -> D 1.0 -> E [1.0]
         ///                -> B 1.0 -> E [2.0]
         ///                -> E 3.0
-        ///       -> F 1.0 -> B 1.0 -> E [2.0]
         /// </summary>
         [Fact]
         public async Task TmpMy5()

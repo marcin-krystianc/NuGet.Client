@@ -9,16 +9,19 @@ namespace NuGet.DependencyResolver
 {
     internal class Tracker<TItem>
     {
-        private readonly Dictionary<string, Entry> _entries
-            = new Dictionary<string, Entry>(StringComparer.OrdinalIgnoreCase);
+        private readonly Dictionary<string, HashSet<GraphNode<TItem>>> _entries
+            = new Dictionary<string, HashSet<GraphNode<TItem>>>(StringComparer.OrdinalIgnoreCase);
 
-        public void Track(GraphNode<TItem> item)
+        public void Track(GraphNode<TItem> node)
         {
-            var entry = GetEntry(item);
-            if (!entry.List.Contains(item))
-            {
-                entry.List.Add(item);
-            }
+            var entry = GetEntry(node);
+            entry.Add(node);
+        }
+
+        public void Remove(GraphNode<TItem> node)
+        {
+            var entry = GetEntry(node);
+            entry.Remove(node);
         }
 
         public bool IsBestVersion(GraphNode<TItem> item)
@@ -27,7 +30,7 @@ namespace NuGet.DependencyResolver
 
             var version = item.Item.Key.Version;
 
-            foreach (var known in entry.List.Where(x => x.Disposition != Disposition.Rejected))
+            foreach (var known in entry.Where(x => x.Disposition != Disposition.Rejected))
             {
                 if (version < known.Item.Key.Version)
                 {
@@ -41,7 +44,7 @@ namespace NuGet.DependencyResolver
         public bool IsAnyVersionAccepted(GraphNode<TItem> item)
         {
             var entry = GetEntry(item);
-            return entry.List.Any(x => x.Disposition == Disposition.Accepted);
+            return entry.Any(x => x.Disposition == Disposition.Accepted);
         }
 
         internal void Clear()
@@ -49,25 +52,15 @@ namespace NuGet.DependencyResolver
             _entries.Clear();
         }
 
-        private Entry GetEntry(GraphNode<TItem> item)
+        private HashSet<GraphNode<TItem>> GetEntry(GraphNode<TItem> item)
         {
-            Entry itemList;
-            if (!_entries.TryGetValue(item.Key.Name, out itemList))
+            if (!_entries.TryGetValue(item.Key.Name, out var itemList))
             {
-                itemList = new Entry();
+                itemList = new HashSet<GraphNode<TItem>>();
                 _entries[item.Key.Name] = itemList;
             }
+
             return itemList;
-        }
-
-        private class Entry
-        {
-            public Entry()
-            {
-                List = new HashSet<GraphNode<TItem>>();
-            }
-
-            public HashSet<GraphNode<TItem>> List { get; set; }
         }
     }
 }
