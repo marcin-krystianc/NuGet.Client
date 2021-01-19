@@ -6,6 +6,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
 using System.Text;
+using CallContextProfiling;
 using NuGet.LibraryModel;
 using NuGet.Shared;
 using NuGet.Versioning;
@@ -18,7 +19,7 @@ namespace NuGet.DependencyResolver
 
         public static AnalyzeResult<RemoteResolveResult> Analyze(this GraphNode<RemoteResolveResult> root)
         {
-            //using (CallContextProfiler.NamedStep("Analyze"))
+            using (CallContextProfiler.NamedStep("Analyze"))
             {
                 var result = new AnalyzeResult<RemoteResolveResult>();
 
@@ -31,9 +32,9 @@ namespace NuGet.DependencyResolver
             }
         }
 
-        private static void RemoveNode<TItem>(GraphNode<TItem> node, Tracker<TItem> tracker)
+        private static void RemoveNode(GraphNode<RemoteResolveResult> node, Tracker<RemoteResolveResult> tracker)
         {
-            var nodesToRemove = new Queue<GraphNode<TItem>>();
+            var nodesToRemove = new Queue<GraphNode<RemoteResolveResult>>();
             nodesToRemove.Enqueue(node);
 
             while (nodesToRemove.Any())
@@ -118,7 +119,9 @@ namespace NuGet.DependencyResolver
             }
         }
 
-        private static void WalkTreeCheckDowngrades(GraphNode<RemoteResolveResult> node, Dictionary<GraphNode<RemoteResolveResult>, GraphNode<RemoteResolveResult>> workingDowngrades)
+        private static bool WalkTreeCheckDowngrades(GraphNode<RemoteResolveResult> node,
+            Dictionary<GraphNode<RemoteResolveResult>, GraphNode<RemoteResolveResult>> workingDowngrades,
+            Tracker<RemoteResolveResult> tracker)
         {
             // Cycle:
             //
@@ -158,7 +161,7 @@ namespace NuGet.DependencyResolver
                         {
                             node.Disposition = Disposition.Acceptable;
                             workingDowngrades.Remove(node);
-                            return;
+                            return false;
                         }
 
                         break;
@@ -206,12 +209,16 @@ namespace NuGet.DependencyResolver
                 }
             }
 
-            // Remove this node from the tree so the nothing else evaluates this.
-            // This is ok since we have a parent pointer and we can still print the path
-            foreach (var outerNode in node.OuterNodes)
+            if (workingDowngrades.ContainsKey(node))
             {
-                outerNode.InnerNodes.Remove(node);
+                // Remove this node from the tree so the nothing else evaluates this.
+                // This is ok since we have a parent pointer and we can still print the path
+                RemoveNode(node, tracker);
+                node.Disposition = Disposition.PotentiallyDowngraded;
+                return true;
             }
+
+            return false;
         }
 
         /// <summary>
@@ -379,24 +386,19 @@ namespace NuGet.DependencyResolver
             return node.Key.TypeConstraintAllowsAnyOf(LibraryDependencyTarget.Package);
         }
 
-        private static void TryResolveConflicts<TItem>(this GraphNode<TItem> root, List<VersionConflictResult<TItem>> versionConflicts, List<GraphNode<TItem>> cycles, List<DowngradeResult<TItem>> downgrades)
+        private static void TryResolveConflicts(this GraphNode<RemoteResolveResult> root, List<VersionConflictResult<RemoteResolveResult>> versionConflicts, List<GraphNode<RemoteResolveResult>> cycles, List<DowngradeResult<RemoteResolveResult>> downgrades)
         {
             // now we walk the tree as often as it takes to determine
             // which paths are accepted or rejected, based on conflicts occuring
             // between cousin packages
 
-            var acceptedLibraries = Cache<TItem>.RentDictionary();
-            var workingDowngrades = new Dictionary<GraphNode<TItem>, GraphNode<TItem>>();
+            var acceptedLibraries = Cache<RemoteResolveResult>.RentDictionary();
+            var workingDowngrades = new Dictionary<GraphNode<RemoteResolveResult>, GraphNode<RemoteResolveResult>>();
 
             var patience = 1000;
             var incomplete = true;
 
-            foreach (var node in root.EnumerateAllInTopologicalOrder().Where(x => x.Disposition == Disposition.Cycle))
-            {
-                cycles.Add(node);
-            }
-
-            var tracker = Cache<TItem>.RentTracker();
+            var tracker = Cache<RemoteResolveResult>.RentTracker();
             foreach (var node in root.EnumerateAll())
             {
                 tracker.Track(node);
@@ -407,6 +409,10 @@ namespace NuGet.DependencyResolver
 
             while (incomplete && --patience != 0)
             {
+                if (patience == 1)
+                {
+                }
+
                 if (hasCentralTransitiveDependencies)
                 {
                     // Some of the central transitive nodes may be rejected now because their parents were rejected
@@ -416,7 +422,7 @@ namespace NuGet.DependencyResolver
 
                 foreach (var node in root.EnumerateAllInTopologicalOrder())
                 {
-                    WalkTreeAcceptOrRejectNodes(node, tracker, acceptedLibraries, workingDowngrades);
+                    WalkTreeAcceptOrRejectNodes(node, tracker, acceptedLibraries, workingDowngrades, cycles);
                 }
 
                 incomplete = root.EnumerateAll().Any(x => x.Disposition == Disposition.Acceptable);
@@ -424,7 +430,7 @@ namespace NuGet.DependencyResolver
 
             foreach (var p in workingDowngrades)
             {
-                downgrades.Add(new DowngradeResult<TItem>
+                downgrades.Add(new DowngradeResult<RemoteResolveResult>
                 {
                     DowngradedFrom = p.Key,
                     DowngradedTo = p.Value
@@ -436,8 +442,8 @@ namespace NuGet.DependencyResolver
                 WalkTreeDectectConflicts(node, versionConflicts, acceptedLibraries);
             }
 
-            Cache<TItem>.ReleaseTracker(tracker);
-            Cache<TItem>.ReleaseDictionary(acceptedLibraries);
+            Cache<RemoteResolveResult>.ReleaseTracker(tracker);
+            Cache<RemoteResolveResult>.ReleaseDictionary(acceptedLibraries);
         }
 
         private static void WalkTreeDectectConflicts<TItem>(GraphNode<TItem> node,  List<VersionConflictResult<TItem>> versionConflicts, Dictionary<string, GraphNode<TItem>> acceptedLibraries)
@@ -484,8 +490,18 @@ namespace NuGet.DependencyResolver
             }
         }
 
-        private static void WalkTreeAcceptOrRejectNodes<TItem>(GraphNode<TItem> node, Tracker<TItem> tracker, Dictionary<string, GraphNode<TItem>> acceptedLibraries, Dictionary<GraphNode<TItem>, GraphNode<TItem>> workingDowngrades)
+        private static void WalkTreeAcceptOrRejectNodes(GraphNode<RemoteResolveResult> node,
+            Tracker<RemoteResolveResult> tracker,
+            Dictionary<string, GraphNode<RemoteResolveResult>> acceptedLibraries,
+            Dictionary<GraphNode<RemoteResolveResult>, GraphNode<RemoteResolveResult>> workingDowngrades,
+            List<GraphNode<RemoteResolveResult>> cycles)
         {
+            if (node.Disposition == Disposition.Cycle)
+            {
+                cycles.Add(node);
+                RemoveNode(node, tracker);
+            }
+
             if (node.ParentNodes.Count > 0 && node.ParentNodes.All(x => x.Disposition != Disposition.Accepted))
             {
                 return;
@@ -495,7 +511,16 @@ namespace NuGet.DependencyResolver
             {
                 if (node.OuterNodes.All(x => x.Disposition == Disposition.Rejected))
                 {
-                    node.Disposition = Disposition.Rejected;
+                    if (node.Disposition == Disposition.PotentiallyEclipsed)
+                    {
+                        if (IsEclipsed(node))
+                        {
+                            RemoveNode(node, tracker);
+                        }
+
+                        node.Disposition = Disposition.Rejected;
+                    }
+
                     return;
                 }
 
@@ -505,34 +530,31 @@ namespace NuGet.DependencyResolver
                 }
             }
 
-            if (node.Disposition == Disposition.PotentiallyDowngraded)
-            {
-                WalkTreeCheckDowngrades(node, workingDowngrades);
-            }
-            else if (node.Disposition == Disposition.PotentiallyEclipsed)
+            if (node.Disposition == Disposition.PotentiallyEclipsed)
             {
                 if (IsEclipsed(node))
                 {
-                    node.Disposition = Disposition.Rejected;
                     RemoveNode(node, tracker);
                 }
                 else
                 {
                     node.Disposition = Disposition.Acceptable;
                 }
-
             }
 
-            if (node.Disposition == Disposition.Acceptable)
+            if (node.Disposition == Disposition.Acceptable || node.Disposition == Disposition.PotentiallyDowngraded)
             {
-                if (tracker.IsBestVersion(node))
+                if (!WalkTreeCheckDowngrades(node, workingDowngrades, tracker))
                 {
-                    node.Disposition = Disposition.Accepted;
-                    acceptedLibraries[node.Key.Name] = node;
-                }
-                else if (tracker.IsAnyVersionAccepted(node))
-                {
-                    node.Disposition = Disposition.Rejected;
+                    if (tracker.IsBestVersion(node))
+                    {
+                        node.Disposition = Disposition.Accepted;
+                        acceptedLibraries[node.Key.Name] = node;
+                    }
+                    else if (tracker.IsAnyVersionAccepted(node))
+                    {
+                        node.Disposition = Disposition.Rejected;
+                    }
                 }
             }
         }
