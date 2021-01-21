@@ -2209,6 +2209,54 @@ namespace NuGet.DependencyResolver.Tests
             Assert.Equal(0, result.Cycles.Count);
         }
 
+        /// <summary>
+        ///       -> X 1.0 -> C 1.0 -> D 1.0 -> F 2.0
+        /// A 1.0
+        ///       -> Y 1.0 -> B 2.0 -> D 1.0 -> F 2.0
+        ///                         -> F 1.0
+        /// </summary>
+        [Fact]
+        public async Task TmpMy9()
+        {
+            var context = new TestRemoteWalkContext();
+            var provider = new DependencyProvider();
+            provider.Package("A", "1.0")
+                .DependsOn("X", "1.0")
+                .DependsOn("Y", "1.0");
+
+            provider.Package("X", "1.0")
+                .DependsOn("C", "1.0");
+
+            provider.Package("Y", "1.0")
+                .DependsOn("B", "2.0");
+
+            provider.Package("C", "1.0")
+                .DependsOn("D", "1.0");
+
+            provider.Package("D", "1.0")
+                .DependsOn("F", "2.0");
+
+            provider.Package("B", "2.0")
+                .DependsOn("D", "1.0")
+                .DependsOn("F", "1.0");
+
+            provider.Package("E", "1.0")
+                .DependsOn("F", "2.0");
+
+            provider.Package("F", "1.0");
+            provider.Package("F", "2.0");
+
+            context.LocalLibraryProviders.Add(provider);
+            var walker = new RemoteDependencyWalker(context);
+            var node = await DoWalkAsync(walker, "A");
+
+            var result = node.Analyze();
+
+            Assert.Equal(0, result.VersionConflicts.Count);
+            Assert.Equal(0, result.Downgrades.Count);
+            Assert.Equal(0, result.Cycles.Count);
+        }
+
         private void AssertPath<TItem>(GraphNode<TItem> node, params string[] items)
         {
             var matches = new List<string>();
