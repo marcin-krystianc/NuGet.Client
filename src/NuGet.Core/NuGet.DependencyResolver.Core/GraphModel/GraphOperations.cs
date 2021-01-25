@@ -398,11 +398,9 @@ namespace NuGet.DependencyResolver
             var patience = 1000;
             var incomplete = true;
 
+            var allNodes = root.EnumerateAll().ToList();
             var tracker = Cache<RemoteResolveResult>.RentTracker();
-            foreach (var node in root.EnumerateAll())
-            {
-                tracker.Track(node);
-            }
+            tracker.TrackRootNode(root);
 
             var centralTransitiveNodes = root.InnerNodes.Where(n => n.Item.IsCentralTransitive).ToList();
             var hasCentralTransitiveDependencies = centralTransitiveNodes.Count > 0;
@@ -437,54 +435,45 @@ namespace NuGet.DependencyResolver
                 });
             }
 
-            foreach (var node in root.EnumerateAll())
+            foreach (var node in allNodes)
             {
-                WalkTreeDectectConflicts(node, versionConflicts, acceptedLibraries);
+                DetectConflicts(node, versionConflicts, acceptedLibraries);
             }
 
             Cache<RemoteResolveResult>.ReleaseTracker(tracker);
             Cache<RemoteResolveResult>.ReleaseDictionary(acceptedLibraries);
         }
 
-        private static void WalkTreeDectectConflicts<TItem>(GraphNode<TItem> node,  List<VersionConflictResult<TItem>> versionConflicts, Dictionary<string, GraphNode<TItem>> acceptedLibraries)
+        private static void DetectConflicts<TItem>(GraphNode<TItem> node,  List<VersionConflictResult<TItem>> versionConflicts, Dictionary<string, GraphNode<TItem>> acceptedLibraries)
         {
-            if (node.Disposition != Disposition.Accepted)
-            {
+            if (node.Disposition != Disposition.Rejected ||
+                node.OuterNodes.All(x => x.Disposition != Disposition.Accepted))
                 return;
-            }
 
-            // For all accepted nodes, find dependencies that aren't satisfied by the version
-            // of the package that we have selectedc
-            var innerNodes = node.InnerNodes;
-            var count = innerNodes.Count;
-            for (var i = 0; i < count; i++)
+            GraphNode<TItem> acceptedNode;
+            if (acceptedLibraries.TryGetValue(node.Key.Name, out acceptedNode) &&
+                node != acceptedNode &&
+                node.Key.VersionRange != null &&
+                acceptedNode.Item.Key.Version != null)
             {
-                var childNode = innerNodes[i];
-                GraphNode<TItem> acceptedNode;
-                if (acceptedLibraries.TryGetValue(childNode.Key.Name, out acceptedNode) &&
-                    childNode != acceptedNode &&
-                    childNode.Key.VersionRange != null &&
-                    acceptedNode.Item.Key.Version != null)
+                var acceptedType = LibraryDependencyTargetUtils.Parse(acceptedNode.Item.Key.Type);
+                var type = node.Key.TypeConstraint;
+
+                // Skip the check if a project reference override a package dependency
+                // Check the type constraints, if there is any overlap check for conflict
+                if ((acceptedType & (LibraryDependencyTarget.Project | LibraryDependencyTarget.ExternalProject)) ==
+                    LibraryDependencyTarget.None
+                    && (type & acceptedType) != LibraryDependencyTarget.None)
                 {
-                    var acceptedType = LibraryDependencyTargetUtils.Parse(acceptedNode.Item.Key.Type);
-                    var childType = childNode.Key.TypeConstraint;
+                    var versionRange = node.Key.VersionRange;
+                    var checkVersion = acceptedNode.Item.Key.Version;
 
-                    // Skip the check if a project reference override a package dependency
-                    // Check the type constraints, if there is any overlap check for conflict
-                    if ((acceptedType & (LibraryDependencyTarget.Project | LibraryDependencyTarget.ExternalProject)) == LibraryDependencyTarget.None
-                        && (childType & acceptedType) != LibraryDependencyTarget.None)
+                    if (!versionRange.Satisfies(checkVersion))
                     {
-                        var versionRange = childNode.Key.VersionRange;
-                        var checkVersion = acceptedNode.Item.Key.Version;
-
-                        if (!versionRange.Satisfies(checkVersion))
+                        versionConflicts.Add(new VersionConflictResult<TItem>
                         {
-                            versionConflicts.Add(new VersionConflictResult<TItem>
-                            {
-                                Selected = acceptedNode,
-                                Conflicting = childNode
-                            });
-                        }
+                            Selected = acceptedNode, Conflicting = node
+                        });
                     }
                 }
             }
@@ -544,6 +533,10 @@ namespace NuGet.DependencyResolver
 
             if (node.Disposition == Disposition.Acceptable || node.Disposition == Disposition.PotentiallyDowngraded)
             {
+                if (node.Key.Name == "F")
+                {
+                }
+
                 if (!WalkTreeCheckDowngrades(node, workingDowngrades, tracker))
                 {
                     if (tracker.IsBestVersion(node))
@@ -554,6 +547,7 @@ namespace NuGet.DependencyResolver
                     else if (tracker.IsAnyVersionAccepted(node))
                     {
                         node.Disposition = Disposition.Rejected;
+                        tracker.Untrack(node);
                     }
                 }
             }
@@ -620,7 +614,7 @@ namespace NuGet.DependencyResolver
             Cache<TItem>.ReleaseQueue(queue);
         }
 
-        private static IEnumerable<GraphNode<TItem>> EnumerateAllInTopologicalOrder<TItem>(this GraphNode<TItem> root)
+        internal static IEnumerable<GraphNode<TItem>> EnumerateAllInTopologicalOrder<TItem>(this GraphNode<TItem> root)
         {
             var inDegree = root.EnumerateAll()
                 .ToDictionary(x => x, x => x.OuterNodes.Count);

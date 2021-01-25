@@ -230,18 +230,6 @@ namespace NuGet.DependencyResolver
                         // disable concurrency
                         await nodeTask.Value;
                         tasks.Add(nodeTask.Value);
-/*
-                        var nodeTask = CreateGraphNode(
-                                dependency.LibraryRange,
-                                framework,
-                                runtimeName,
-                                runtimeGraph,
-                                ChainPredicate(predicate, node, dependency),
-                                innerEdge,
-                                transitiveCentralPackageVersions,
-                                graphNodesCache);
-                        tasks.Add(nodeTask);
-*/
                     }
                     else
                     {
