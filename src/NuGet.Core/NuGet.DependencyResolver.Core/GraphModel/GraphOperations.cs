@@ -6,7 +6,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
 using System.Text;
-using CallContextProfiling;
+//using CallContextProfiling;
 using NuGet.LibraryModel;
 using NuGet.Shared;
 using NuGet.Versioning;
@@ -19,7 +19,7 @@ namespace NuGet.DependencyResolver
 
         public static AnalyzeResult<RemoteResolveResult> Analyze(this GraphNode<RemoteResolveResult> root)
         {
-            using (CallContextProfiler.NamedStep("Analyze"))
+            //using (CallContextProfiler.NamedStep("Analyze"))
             {
                 var result = new AnalyzeResult<RemoteResolveResult>();
 
@@ -60,9 +60,6 @@ namespace NuGet.DependencyResolver
         {
             //using (CallContextProfiler.NamedStep("IsEclipsed"))
             {
-                if (node.Disposition != Disposition.PotentiallyEclipsed)
-                    return false;
-
                 var visitedNodes = new HashSet<GraphNode<TItem>>();
                 var stack = new Stack<(GraphNode<TItem>, int)>();
                 stack.Push((node, 0));
@@ -123,7 +120,7 @@ namespace NuGet.DependencyResolver
             Dictionary<GraphNode<RemoteResolveResult>, GraphNode<RemoteResolveResult>> workingDowngrades,
             Tracker<RemoteResolveResult> tracker)
         {
-            using (CallContextProfiler.NamedStep("WalkTreeCheckDowngrades"))
+            //using (CallContextProfiler.NamedStep("WalkTreeCheckDowngrades"))
             {
                 // Cycle:
                 //
@@ -221,7 +218,7 @@ namespace NuGet.DependencyResolver
                     // Remove this node from the tree so the nothing else evaluates this.
                     // This is ok since we have a parent pointer and we can still print the path
                     RemoveNode(node, tracker);
-                    node.Disposition = Disposition.PotentiallyDowngraded;
+                    node.Disposition = Disposition.Rejected;
                     return true;
                 }
 
@@ -405,8 +402,7 @@ namespace NuGet.DependencyResolver
 
             var patience = 1000;
             var incomplete = true;
-
-            var allNodes = root.EnumerateAll().ToList();
+;
             var tracker = Cache<RemoteResolveResult>.RentTracker();
             tracker.TrackRootNode(root);
 
@@ -444,7 +440,7 @@ namespace NuGet.DependencyResolver
                 });
             }
 
-            foreach (var node in allNodes)
+            foreach (var node in root.EnumerateAll())
             {
                 DetectConflicts(node, versionConflicts, acceptedLibraries);
             }
@@ -498,6 +494,7 @@ namespace NuGet.DependencyResolver
             {
                 cycles.Add(node);
                 RemoveNode(node, tracker);
+                return;
             }
 
             if (node.ParentNodes.Count > 0 && node.ParentNodes.All(x => x.Disposition != Disposition.Accepted))
@@ -509,12 +506,9 @@ namespace NuGet.DependencyResolver
             {
                 if (node.OuterNodes.All(x => x.Disposition == Disposition.Rejected))
                 {
-                    if (node.Disposition == Disposition.PotentiallyEclipsed)
+                    if (IsEclipsed(node))
                     {
-                        if (IsEclipsed(node))
-                        {
-                            RemoveNode(node, tracker);
-                        }
+                        RemoveNode(node, tracker);
                     }
 
                     node.Disposition = Disposition.Rejected;
@@ -528,26 +522,20 @@ namespace NuGet.DependencyResolver
                 }
             }
 
-            if (node.Disposition == Disposition.PotentiallyEclipsed)
+            if (node.Disposition == Disposition.Acceptable)
             {
-                if (IsEclipsed(node))
-                {
-                    RemoveNode(node, tracker);
-                }
-                else
-                {
-                    node.Disposition = Disposition.Acceptable;
-                }
-            }
-
-            if (node.Disposition == Disposition.Acceptable || node.Disposition == Disposition.PotentiallyDowngraded)
-            {
-                if (node.Key.Name == "F")
+                if (node.Key.Name == "D")
                 {
                 }
 
-                if (!tracker.IsPotentiallyDowngraded (node) || !WalkTreeCheckDowngrades(node, workingDowngrades, tracker))
+                if (!WalkTreeCheckDowngrades(node, workingDowngrades, tracker))
                 {
+                    if (IsEclipsed(node))
+                    {
+                        RemoveNode(node, tracker);
+                        return;
+                    }
+
                     if (tracker.IsBestVersion(node))
                     {
                         node.Disposition = Disposition.Accepted;

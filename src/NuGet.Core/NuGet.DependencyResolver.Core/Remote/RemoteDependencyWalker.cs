@@ -8,7 +8,7 @@ using System.Diagnostics;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
-using CallContextProfiling;
+//using CallContextProfiling;
 using NuGet.Frameworks;
 using NuGet.LibraryModel;
 using NuGet.Packaging;
@@ -29,7 +29,7 @@ namespace NuGet.DependencyResolver
 
         public async Task<GraphNode<RemoteResolveResult>> WalkAsync(LibraryRange library, NuGetFramework framework, string runtimeIdentifier, RuntimeGraph runtimeGraph, bool recursive)
         {
-            using (CallContextProfiler.NamedStep("WalkAsync"))
+            //using (CallContextProfiler.NamedStep("WalkAsync"))
             {
                 var transitiveCentralPackageVersions = new TransitiveCentralPackageVersions();
                 var graphNodesCache =
@@ -43,7 +43,6 @@ namespace NuGet.DependencyResolver
                         null),
                     outerEdge: null,
                     transitiveCentralPackageVersions: transitiveCentralPackageVersions,
-                    Disposition.Acceptable,
                     graphNodesCache);
 
                 // do not calculate the hashset of the direct dependencies for cases when there are not any elements in the transitiveCentralPackageVersions queue
@@ -85,7 +84,6 @@ namespace NuGet.DependencyResolver
             Func<LibraryRange, (DependencyResult dependencyResult, LibraryDependency conflictingDependency)> predicate,
             GraphEdge<RemoteResolveResult> outerEdge,
             TransitiveCentralPackageVersions transitiveCentralPackageVersions,
-            Disposition nodeDisposition,
             ConcurrentDictionary<LibraryRange, Lazy<Task<GraphNode<RemoteResolveResult>>>> graphNodesCache)
         {
             List<LibraryDependency> dependencies = null;
@@ -144,7 +142,6 @@ namespace NuGet.DependencyResolver
                     runtimeName,
                     _context,
                     CancellationToken.None),
-                Disposition = nodeDisposition,
             };
 
             Debug.Assert(node.Item != null, "FindLibraryCached should return an unresolved item instead of null");
@@ -206,7 +203,8 @@ namespace NuGet.DependencyResolver
                     }
 
                     if (result.dependencyResult == DependencyResult.Acceptable ||
-                        result.dependencyResult == DependencyResult.PotentiallyEclipsed)
+                        result.dependencyResult == DependencyResult.PotentiallyEclipsed ||
+                        result.dependencyResult == DependencyResult.PotentiallyDowngraded)
                     {
                         // Dependency edge from the current node to the dependency
                         var innerEdge = new GraphEdge<RemoteResolveResult>(outerEdge, node.Item, dependency);
@@ -225,7 +223,6 @@ namespace NuGet.DependencyResolver
                                 ChainPredicate(predicate, node, dependency),
                                 innerEdge,
                                 transitiveCentralPackageVersions,
-                                result.dependencyResult == DependencyResult.Acceptable ? Disposition.Acceptable : Disposition.PotentiallyEclipsed,
                                 graphNodesCache)));
 
                         // disable concurrency
@@ -235,12 +232,11 @@ namespace NuGet.DependencyResolver
                     else
                     {
                         // Keep the node in the tree if we need to look at it later
-                        if (result.dependencyResult == DependencyResult.PotentiallyDowngraded ||
-                            result.dependencyResult == DependencyResult.Cycle)
+                        if (result.dependencyResult == DependencyResult.Cycle)
                         {
                             var dependencyNode = new GraphNode<RemoteResolveResult>(dependency.LibraryRange)
                             {
-                                Disposition = result.dependencyResult == DependencyResult.Cycle ? Disposition.Cycle : Disposition.PotentiallyDowngraded,
+                                Disposition = Disposition.Cycle,
                                 // Resolve the dependency from the cache or sources
                                 Item = await ResolverUtility.FindLibraryCachedAsync(
                                     _context.FindLibraryEntryCache,
@@ -283,21 +279,6 @@ namespace NuGet.DependencyResolver
                 if (StringComparer.OrdinalIgnoreCase.Equals(item.Data.Match.Library.Name, library.Name))
                 {
                     return (DependencyResult.Cycle, null);
-                }
-
-                foreach (var d in item.Data.Dependencies)
-                {
-                    if (d != dependency && library.IsEclipsedBy(d.LibraryRange))
-                    {
-                        if (d.LibraryRange.VersionRange != null &&
-                            library.VersionRange != null &&
-                            !IsGreaterThanOrEqualTo(d.LibraryRange.VersionRange, library.VersionRange))
-                        {
-                            return (DependencyResult.PotentiallyDowngraded, d);
-                        }
-
-                        return (DependencyResult.PotentiallyEclipsed, d);
-                    }
                 }
 
                 return predicate(library);
@@ -458,7 +439,6 @@ namespace NuGet.DependencyResolver
                     predicate: ChainPredicate(_ => (DependencyResult.Acceptable, null), rootNode, centralPackageVersionDependency),
                     outerEdge: null,
                     transitiveCentralPackageVersions: transitiveCentralPackageVersions,
-                    Disposition.Acceptable,
                     graphNodesCache);
 
             node.OuterNodes.Add(rootNode);

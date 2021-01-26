@@ -4,7 +4,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using CallContextProfiling;
+//using CallContextProfiling;
 
 namespace NuGet.DependencyResolver
 {
@@ -18,7 +18,7 @@ namespace NuGet.DependencyResolver
 
         public void TrackRootNode(GraphNode<TItem> rootNode)
         {
-            using (CallContextProfiler.NamedStep("TrackRootNode"))
+            //using (CallContextProfiler.NamedStep("TrackRootNode"))
             {
                 foreach (var node in rootNode.EnumerateAllInTopologicalOrder())
                 {
@@ -79,7 +79,7 @@ namespace NuGet.DependencyResolver
 
         public bool IsPotentiallyDowngraded(GraphNode<TItem> item)
         {
-            using (CallContextProfiler.NamedStep("IsPotentiallyDowngraded"))
+            //using (CallContextProfiler.NamedStep("IsPotentiallyDowngraded"))
             {
                 var entry = GetEntry(item);
 
