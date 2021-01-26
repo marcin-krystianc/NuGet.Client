@@ -4,6 +4,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using CallContextProfiling;
 
 namespace NuGet.DependencyResolver
 {
@@ -17,9 +18,12 @@ namespace NuGet.DependencyResolver
 
         public void TrackRootNode(GraphNode<TItem> rootNode)
         {
-            foreach (var node in rootNode.EnumerateAllInTopologicalOrder())
+            using (CallContextProfiler.NamedStep("TrackRootNode"))
             {
-                Track(node);
+                foreach (var node in rootNode.EnumerateAllInTopologicalOrder())
+                {
+                    Track(node);
+                }
             }
         }
 
@@ -73,20 +77,27 @@ namespace NuGet.DependencyResolver
             entry.Remove(node);
         }
 
-        public bool IsDowngraded(GraphNode<TItem> item)
+        public bool IsPotentiallyDowngraded(GraphNode<TItem> item)
         {
-            var entry = GetEntry(item);
-
-            var version = item.Item.Key.Version;
-
-            foreach (var known in entry.Where(x => x.Disposition != Disposition.Rejected))
+            using (CallContextProfiler.NamedStep("IsPotentiallyDowngraded"))
             {
-                if (version > known.Item.Key.Version)
-                {
-                }
-            }
+                var entry = GetEntry(item);
 
-            return false;
+                var version = item.Item.Key.Version;
+
+                foreach (var known in entry.Where(x => x.Disposition != Disposition.Rejected))
+                {
+                    if (version > known.Item.Key.Version)
+                    {
+                        // nearest-wins
+                        if (_ascendants[item].Where(x => x.Value > 0).Select(x => x.Key).Intersect(known.OuterNodes)
+                            .Any())
+                            return true;
+                    }
+                }
+
+                return false;
+            }
         }
 
         public bool IsBestVersion(GraphNode<TItem> item)

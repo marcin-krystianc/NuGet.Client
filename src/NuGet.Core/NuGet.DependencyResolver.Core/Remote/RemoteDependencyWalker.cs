@@ -8,6 +8,7 @@ using System.Diagnostics;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using CallContextProfiling;
 using NuGet.Frameworks;
 using NuGet.LibraryModel;
 using NuGet.Packaging;
@@ -28,7 +29,7 @@ namespace NuGet.DependencyResolver
 
         public async Task<GraphNode<RemoteResolveResult>> WalkAsync(LibraryRange library, NuGetFramework framework, string runtimeIdentifier, RuntimeGraph runtimeGraph, bool recursive)
         {
-            //using (CallContextProfiler.NamedStep("WalkAsync"))
+            using (CallContextProfiler.NamedStep("WalkAsync"))
             {
                 var transitiveCentralPackageVersions = new TransitiveCentralPackageVersions();
                 var graphNodesCache =
