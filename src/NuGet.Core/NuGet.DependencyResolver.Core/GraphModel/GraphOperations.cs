@@ -157,6 +157,9 @@ namespace NuGet.DependencyResolver
                     while (true)
                     {
                         var prevDowngraded = downgraded;
+                        if (currentNode.Disposition == Disposition.Rejected)
+                            break;
+
                         if (currentNode.OuterNodes.Count == 0)
                         {
                             if (downgraded == false)
@@ -519,7 +522,7 @@ namespace NuGet.DependencyResolver
                     return;
                 }
 
-                if (node.OuterNodes.All(x => x.Disposition != Disposition.Accepted && x.Disposition != Disposition.Rejected))
+                if (node.OuterNodes.Any(x => x.Disposition != Disposition.Accepted && x.Disposition != Disposition.Rejected))
                 {
                     return;
                 }
