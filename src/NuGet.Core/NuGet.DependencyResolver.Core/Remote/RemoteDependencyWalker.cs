@@ -39,8 +39,7 @@ namespace NuGet.DependencyResolver
                     framework: framework,
                     runtimeName: runtimeIdentifier,
                     runtimeGraph: runtimeGraph,
-                    predicate: _ => (recursive ? DependencyResult.Acceptable : DependencyResult.PotentiallyEclipsed,
-                        null),
+                    predicate: _ => (DependencyResult.Acceptable, null),
                     outerEdge: null,
                     transitiveCentralPackageVersions: transitiveCentralPackageVersions,
                     graphNodesCache);
@@ -202,9 +201,7 @@ namespace NuGet.DependencyResolver
                         }
                     }
 
-                    if (result.dependencyResult == DependencyResult.Acceptable ||
-                        result.dependencyResult == DependencyResult.PotentiallyEclipsed ||
-                        result.dependencyResult == DependencyResult.PotentiallyDowngraded)
+                    if (result.dependencyResult == DependencyResult.Acceptable)
                     {
                         // Dependency edge from the current node to the dependency
                         var innerEdge = new GraphEdge<RemoteResolveResult>(outerEdge, node.Item, dependency);
@@ -403,8 +400,6 @@ namespace NuGet.DependencyResolver
         private enum DependencyResult
         {
             Acceptable,
-            PotentiallyEclipsed,
-            PotentiallyDowngraded,
             Cycle
         }
 
