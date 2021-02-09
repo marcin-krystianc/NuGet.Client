@@ -4,6 +4,8 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using NuGet.Versioning;
+
 //using CallContextProfiling;
 
 namespace NuGet.DependencyResolver
@@ -18,6 +20,13 @@ namespace NuGet.DependencyResolver
 
         public void TrackRootNode(GraphNode<TItem> rootNode)
         {
+            _entries.Clear();
+            if (_ascendants.Count > 0)
+            {
+            }
+
+            _ascendants.Clear();
+
             //using (CallContextProfiler.NamedStep("TrackRootNode"))
             {
                 foreach (var node in rootNode.EnumerateAllInTopologicalOrder())
@@ -43,9 +52,9 @@ namespace NuGet.DependencyResolver
 
                     ascendants[ascendant.Key] = current + ascendant.Value;
                 }
-
-                ascendants[outerNode] = 1;
             }
+
+            ascendants[node] = 1;
 
             var entry = GetEntry(node);
             entry.Add(node);
@@ -98,6 +107,72 @@ namespace NuGet.DependencyResolver
 
                 return false;
             }
+        }
+
+
+        public (int, GraphNode<TItem>)IsEclipsed2(GraphNode<TItem> nodeToCheck)
+        {
+            var root = _ascendants.Single(x => x.Value.Count == 1).Key;
+            var paths = new Dictionary<GraphNode<TItem>, long>();
+
+            var entry = GetEntry(nodeToCheck);
+            var allNodes = entry
+                .Where(x => x.Disposition != Disposition.Rejected)
+                .Where(x => x != nodeToCheck)
+                .SelectMany(x => x.OuterNodes)
+                .ToList();
+
+            if (nodeToCheck.Key.Name == "A" && nodeToCheck.Key.VersionRange.Equals(VersionRange.Parse("2.0")))
+            {
+
+            }
+
+            var roots = _ascendants.ToDictionary(x => x.Key, x => x.Value[root]);
+
+            foreach (var node in allNodes
+                .Select(x => (x, allNodes.Intersect(_ascendants[x].Keys).Count()))
+                .OrderBy(x => x.Item2)
+                .Select(x => x.x))
+            {
+                foreach (var key in paths.Keys)
+                {
+                    if (!_ascendants[node].TryGetValue(key, out var tmp3))
+                        continue;
+
+                    roots[node] -= tmp3 * roots[key];
+                }
+
+                if (!_ascendants[nodeToCheck].TryGetValue(node, out var tmp2))
+                {
+                    tmp2 = 0;
+                }
+
+                var tmp1 = roots[node];
+                var nPaths = tmp1 * tmp2;
+                if (nPaths > 0)
+                {
+                    paths[node] = tmp1 * tmp2;
+                }
+            }
+
+            if (!paths.Any() || paths.Sum(x => x.Value) < _ascendants[nodeToCheck][root])
+            {
+                return (0, null);
+            }
+
+            var versionsToCheck = entry
+                .Where(x => x.Disposition != Disposition.Rejected)
+                .Where(x => x != nodeToCheck)
+                .Where(x => paths.Keys.Intersect(x.OuterNodes).Any())
+                .ToList();
+
+            if (versionsToCheck.All(x => x.Item.Key.Version < nodeToCheck.Item.Key.Version))
+            {
+                // downgrade
+                return (2, versionsToCheck.FirstOrDefault());
+            }
+
+            return (1, versionsToCheck.FirstOrDefault());
         }
 
         public bool IsBestVersion(GraphNode<TItem> item)

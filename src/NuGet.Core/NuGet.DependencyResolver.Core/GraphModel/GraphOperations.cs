@@ -116,116 +116,6 @@ namespace NuGet.DependencyResolver
             }
         }
 
-        private static bool WalkTreeCheckDowngrades(GraphNode<RemoteResolveResult> node,
-            Dictionary<GraphNode<RemoteResolveResult>, GraphNode<RemoteResolveResult>> workingDowngrades,
-            Tracker<RemoteResolveResult> tracker)
-        {
-            //using (CallContextProfiler.NamedStep("WalkTreeCheckDowngrades"))
-            {
-                // Cycle:
-                //
-                // A -> B -> A (cycle)
-                //
-                // Downgrade:
-                //
-                // A -> B -> C -> D 2.0 (downgrade)
-                //        -> D 1.0
-                //
-                // Potential downgrades that turns out to not be downgrades:
-                //
-                // 1. This should never happen in practice since B would have never been valid to begin with.
-                //
-                //    A -> B -> C -> D 2.0
-                //           -> D 1.0
-                //      -> D 2.0
-                //
-                // 2. This occurs if none of the sources have version C 1.0 so C 1.0 is bumped up to C 2.0.
-                //
-                //   A -> B -> C 2.0
-                //     -> C 1.0
-
-                var stack = new Stack<(GraphNode<RemoteResolveResult>, int, bool)>();
-                stack.Push((node, 0, false));
-
-                while (stack.Count > 0)
-                {
-                    var (currentNode, idx, downgraded) = stack.Pop();
-
-                    while (true)
-                    {
-                        var prevDowngraded = downgraded;
-                        if (currentNode.Disposition == Disposition.Rejected)
-                            break;
-
-                        if (currentNode.OuterNodes.Count == 0)
-                        {
-                            if (downgraded == false)
-                            {
-                                node.Disposition = Disposition.Acceptable;
-                                workingDowngrades.Remove(node);
-                                return false;
-                            }
-
-                            break;
-                        }
-
-                        if (idx >= currentNode.OuterNodes.Count)
-                            break;
-
-                        var outerNode = currentNode.OuterNodes[idx];
-                        var sideNodes = outerNode.InnerNodes;
-                        var count = sideNodes.Count;
-                        for (var i = 0; i < count; i++)
-                        {
-                            var sideNode = sideNodes[i];
-                            if (sideNode != node &&
-                                StringComparer.OrdinalIgnoreCase.Equals(sideNode.Key.Name, node.Key.Name))
-                            {
-                                // Nodes that have no version range should be ignored as potential downgrades e.g. framework reference
-                                if (sideNode.Key.VersionRange != null &&
-                                    node.Key.VersionRange != null &&
-                                    !RemoteDependencyWalker.IsGreaterThanOrEqualTo(sideNode.Key.VersionRange,
-                                        node.Key.VersionRange))
-                                {
-                                    // Is the resolved version actually within node's version range? This happen if there
-                                    // was a different request for a lower version of the library than this version range
-                                    // allows but no matching library was found, so the library is bumped up into this
-                                    // version range.
-                                    var resolvedVersion = sideNode?.Item?.Data?.Match?.Library?.Version;
-                                    if (resolvedVersion != null && node.Key.VersionRange.Satisfies(resolvedVersion))
-                                    {
-                                        continue;
-                                    }
-
-                                    workingDowngrades[node] = sideNode;
-                                    downgraded = true;
-                                }
-                                else
-                                {
-                                    downgraded = false;
-                                }
-                            }
-                        }
-
-                        stack.Push((currentNode, idx + 1, prevDowngraded));
-                        currentNode = outerNode;
-                        idx = 0;
-                    }
-                }
-
-                if (workingDowngrades.ContainsKey(node))
-                {
-                    // Remove this node from the tree so the nothing else evaluates this.
-                    // This is ok since we have a parent pointer and we can still print the path
-                    RemoveNode(node, tracker);
-                    node.Disposition = Disposition.Rejected;
-                    return true;
-                }
-
-                return false;
-            }
-        }
-
         /// <summary>
         /// A 1.0.0 -> B 1.0.0 -> C 2.0.0
         /// </summary>
@@ -524,18 +414,19 @@ namespace NuGet.DependencyResolver
 
             if (node.Disposition == Disposition.Acceptable)
             {
-                if (node.Key.Name == "D")
+                var (eclipsed, by) = tracker.IsEclipsed2(node);
+                if (eclipsed == 2)
                 {
+                    workingDowngrades.Add(node, by);
+                    RemoveNode(node, tracker);
+                    node.Disposition = Disposition.Rejected;
                 }
-
-                if (!WalkTreeCheckDowngrades(node, workingDowngrades, tracker))
+                else if (eclipsed == 1)
                 {
-                    if (IsEclipsed(node))
-                    {
-                        RemoveNode(node, tracker);
-                        return;
-                    }
-
+                    RemoveNode(node, tracker);
+                }
+                else
+                {
                     if (tracker.IsBestVersion(node))
                     {
                         node.Disposition = Disposition.Accepted;

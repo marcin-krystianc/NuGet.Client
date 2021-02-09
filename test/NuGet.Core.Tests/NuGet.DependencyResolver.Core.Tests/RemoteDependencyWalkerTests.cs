@@ -2359,6 +2359,63 @@ namespace NuGet.DependencyResolver.Tests
             Assert.Equal(0, result.Downgrades.Count);
         }
 
+        /// <summary>
+        ///    -> P1 ---> P3 ---> P5 ---> P7
+        /// P0      \       \       \       \
+        ///    -----> P2 ---> P4 ---> P6 ---> P8 -> A 2.0
+        ///                    \       \
+        ///                     A 1.0   A 1.0
+        /// </summary>
+        [Fact]
+        public async Task TmpMy13()
+        {
+            var context = new TestRemoteWalkContext();
+            var provider = new DependencyProvider();
+            provider.Package("P0", "1.0")
+                .DependsOn("P1", "1.0")
+                .DependsOn("P2", "1.0");
+
+            provider.Package("P1", "1.0")
+                .DependsOn("P2", "1.0")
+                .DependsOn("P3", "1.0");
+
+            provider.Package("P2", "1.0")
+                .DependsOn("P4", "1.0");
+
+            provider.Package("P3", "1.0")
+                .DependsOn("P4", "1.0")
+                .DependsOn("P5", "1.0");
+
+            provider.Package("P4", "1.0")
+                .DependsOn("P6", "1.0")
+                .DependsOn("A", "1.0");
+
+            provider.Package("P5", "1.0")
+                .DependsOn("P6", "1.0")
+                .DependsOn("P7", "1.0");
+
+            provider.Package("P6", "1.0")
+                .DependsOn("P8", "1.0")
+                .DependsOn("A", "1.0");
+
+            provider.Package("P7", "1.0")
+                .DependsOn("P8", "1.0");
+
+            provider.Package("P8", "1.0")
+                .DependsOn("A", "2.0");
+
+            provider.Package("A", "1.0");
+            provider.Package("A", "2.0");
+
+            context.LocalLibraryProviders.Add(provider);
+            var walker = new RemoteDependencyWalker(context);
+            var node = await DoWalkAsync(walker, "P0");
+
+            var result = node.Analyze();
+
+            Assert.Equal(0, result.Downgrades.Count);
+        }
+
         private void AssertPath<TItem>(GraphNode<TItem> node, params string[] items)
         {
             var matches = new List<string>();
