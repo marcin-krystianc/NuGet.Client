@@ -171,6 +171,17 @@ namespace NuGet.DependencyResolver
                 };
             }
 
+            foreach (var dependency in node.Item.Data.Dependencies)
+            {
+                // In case of conflict because of a centrally managed version that is not direct dependency
+                // the centrally managed package versions need to be added to the graph explicitelly as they are not added otherwise
+                if (dependency.VersionCentrallyManaged &&
+                    dependency.ReferenceType == LibraryDependencyReferenceType.None)
+                {
+                    transitiveCentralPackageVersions.Add(dependency, node);
+                }
+            }
+
             // do not add nodes for all the centrally managed package versions to the graph
             // they will be added only if they are transitive
             foreach (var dependency in node.Item.Data.Dependencies.Where(d => IsDependencyValidForGraph(d)))
@@ -180,6 +191,8 @@ namespace NuGet.DependencyResolver
                 if (outerEdge == null
                     || dependency.SuppressParent != LibraryIncludeFlags.All)
                 {
+                    transitiveCentralPackageVersions.Add(dependency.Name, node);
+
                     var result = predicate(dependency.LibraryRange);
 
                     // Check for a cycle, this is needed for A (project) -> A (package)
@@ -191,14 +204,7 @@ namespace NuGet.DependencyResolver
 
                     if (result.dependencyResult != DependencyResult.Acceptable)
                     {
-                        // In case of conflict because of a centrally managed version that is not direct dependency
-                        // the centrally managed package versions need to be added to the graph explicitelly as they are not added otherwise
-                        if (result.conflictingDependency != null &&
-                            result.conflictingDependency.VersionCentrallyManaged &&
-                            result.conflictingDependency.ReferenceType == LibraryDependencyReferenceType.None)
-                        {
-                            MarkCentralVersionForTransitiveProcessing(result.conflictingDependency, transitiveCentralPackageVersions, node);
-                        }
+
                     }
 
                     if (result.dependencyResult == DependencyResult.Acceptable)
@@ -404,16 +410,6 @@ namespace NuGet.DependencyResolver
         }
 
         /// <summary>
-        /// Mark a central package version that it is transitive and need to be added to the graph.
-        /// </summary>
-        private void MarkCentralVersionForTransitiveProcessing(LibraryDependency libraryDependency,
-            TransitiveCentralPackageVersions transitiveCentralPackageVersions,
-            GraphNode<RemoteResolveResult> parentNode)
-        {
-            transitiveCentralPackageVersions.Add(libraryDependency, parentNode);
-        }
-
-        /// <summary>
         /// New <see cref="GraphNode{RemoteResolveResult}"/> will be created for each of the items in the <paramref name="transitiveCentralPackageVersions"/>
         /// and added as nodes of the <paramref name="rootNode"/>.
         /// </summary>
@@ -456,39 +452,55 @@ namespace NuGet.DependencyResolver
 
         internal class TransitiveCentralPackageVersions
         {
-            private ConcurrentQueue<LibraryDependency> _toBeProcessedTransitiveCentralPackageVersions;
-            private ConcurrentDictionary<string, List<GraphNode<RemoteResolveResult>>> _transitiveCentralPackageVersions;
+            private readonly ConcurrentDictionary<string, LibraryDependency> _transitiveCentralPackageVersions;
+            private readonly ConcurrentDictionary<string, List<GraphNode<RemoteResolveResult>>> _tmp;
 
             internal TransitiveCentralPackageVersions()
             {
-                _toBeProcessedTransitiveCentralPackageVersions = new ConcurrentQueue<LibraryDependency>();
-                _transitiveCentralPackageVersions = new ConcurrentDictionary<string, List<GraphNode<RemoteResolveResult>>>(StringComparer.OrdinalIgnoreCase);
+                _transitiveCentralPackageVersions = new ConcurrentDictionary<string, LibraryDependency>(StringComparer.OrdinalIgnoreCase);
+                _tmp = new ConcurrentDictionary<string, List<GraphNode<RemoteResolveResult>>>(StringComparer.OrdinalIgnoreCase);;
+            }
+
+            internal void Add(string dependency, GraphNode<RemoteResolveResult> parentNode)
+            {
+                _tmp.AddOrUpdate(dependency,
+                    (key) => new List<GraphNode<RemoteResolveResult>>() {parentNode},
+                    (key, value) =>
+                    {
+                        lock (value)
+                        {
+                            value.Add(parentNode);
+                            return value;
+                        }
+                    });
             }
 
             internal void Add(LibraryDependency centralPackageVersionDependency, GraphNode<RemoteResolveResult> parentNode)
             {
-                _transitiveCentralPackageVersions.AddOrUpdate(centralPackageVersionDependency.Name,
-                    (key) =>
-                    {
-                        _toBeProcessedTransitiveCentralPackageVersions.Enqueue(centralPackageVersionDependency);
-                        return new List<GraphNode<RemoteResolveResult>>() { parentNode };
-                    },
-                    (key, value) =>
-                    {
-                        value.Add(parentNode);
-                        return value;
-                    });
+                _transitiveCentralPackageVersions.TryAdd(centralPackageVersionDependency.Name,
+                    centralPackageVersionDependency);
             }
 
             internal bool TryTake(out LibraryDependency centralPackageVersionDependency)
             {
-                return _toBeProcessedTransitiveCentralPackageVersions.TryDequeue(out centralPackageVersionDependency);
+                while (_transitiveCentralPackageVersions.Any())
+                {
+                    var kvp = _transitiveCentralPackageVersions.First();
+                    _transitiveCentralPackageVersions.TryRemove(kvp.Key, out var _);
+                    if (_tmp.ContainsKey(kvp.Key))
+                    {
+                        centralPackageVersionDependency = kvp.Value;
+                        return true;
+                    }
+                }
 
+                centralPackageVersionDependency = null;
+                return false;
             }
 
             internal void AddParentsToNode(GraphNode<RemoteResolveResult> node)
             {
-                foreach (var parent in _transitiveCentralPackageVersions[node.Item.Key.Name])
+                foreach (var parent in _tmp[node.Item.Key.Name])
                 {
                     node.ParentNodes.Add(parent);
                 }

@@ -166,7 +166,7 @@ namespace NuGet.DependencyResolver
                 .Where(x => paths.Keys.Intersect(x.OuterNodes).Any())
                 .ToList();
 
-            if (versionsToCheck.All(x => x.Item.Key.Version < nodeToCheck.Item.Key.Version))
+            if (versionsToCheck.All(x => x.Item.Key.Version != null && x.Item.Key.Version < nodeToCheck.Item.Key.Version))
             {
                 // downgrade
                 return (2, versionsToCheck.FirstOrDefault());
