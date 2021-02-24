@@ -159,6 +159,9 @@ namespace NuGet.DependencyResolver
                 };
             }
 
+            // Yield the task, to help uncovering concurrency issues in tests
+            await Task.Yield();
+
             // do not add nodes for all the centrally managed package versions to the graph
             // they will be added only if they are transitive
             foreach (var dependency in node.Item.Data.Dependencies.Where(d => IsDependencyValidForGraph(d)))

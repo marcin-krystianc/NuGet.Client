@@ -1379,6 +1379,45 @@ namespace NuGet.DependencyResolver.Tests
         }
 
         /// <summary>
+        /// A -> B 1.0 -> D 1.0
+        ///   -> C 1.0 -> D 1.0
+        ///
+        ///  D has version defined centrally 1.0.0
+        ///  D 1.0.0
+        /// </summary>
+        /// <returns></returns>
+        [Fact]
+        public async Task CPVMConcurrencyIssueTest()
+        {
+            var framework = NuGetFramework.Parse("net45");
+
+            var context = new TestRemoteWalkContext();
+            var provider = new DependencyProvider();
+
+            provider.Package("A", "1.0")
+                .DependsOn("B", "1.0")
+                .DependsOn("C", "1.0")
+                // Simulates the existence of a D centrally defined package that is not direct dependency
+                .DependsOn("D", "1.0", LibraryDependencyTarget.Package, versionCentrallyManaged: true,
+                    libraryDependencyReferenceType: LibraryDependencyReferenceType.None);
+
+            provider.Package("B", "1.0")
+                .DependsOn("D", "1.0");
+
+            provider.Package("C", "1.0")
+                .DependsOn("D", "1.0");
+
+            provider.Package("D", "1.0");
+
+            context.LocalLibraryProviders.Add(provider);
+            var walker = new RemoteDependencyWalker(context);
+
+            // Act
+            var rootNode = await DoWalkAsync(walker, "A", framework);
+            Assert.Equal(3, rootNode.InnerNodes.Count);
+        }
+
+        /// <summary>
         /// A -> B 1.0.0 -> C 1.0.0(this will be rejected) -> D 2.0.0(this will be downgraded due to central 1.0.0) -> E 1.0.0
         ///   -> F 1.0.0 -> C 2.0.0 -> H 2.0.0
         ///   -> G 1.0.0 -> H 1.0.0(this will be rejected) -> D 1.0.0
