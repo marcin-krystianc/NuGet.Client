@@ -95,7 +95,7 @@ namespace NuGet.Commands
 
             for (var i = 0; i < orderedCriteriaSets.Count; i++)
             {
-                // Create a new library each time to avoid
+                // Create a new library each time to avoid 
                 // assets being added from other criteria.
                 lockFileLib = new LockFileTargetLibrary()
                 {

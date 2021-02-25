@@ -89,10 +89,10 @@ namespace NuGet.Commands
         /// <summary>
         /// Add the LockFileTargetLibrary to cache.
         /// </summary>
-        public void TryAddLockFileTargetLibrary(RestoreTargetGraph graph, NuGetFramework framework, LockFileLibrary lockFileLibrary, LibraryDependency libraryDependency, LibraryIncludeFlags libraryIncludeFlags, LockFileTargetLibrary lockFileTargetLibrary)
+        public bool TryAddLockFileTargetLibrary(RestoreTargetGraph graph, NuGetFramework framework, LockFileLibrary lockFileLibrary, LibraryDependency libraryDependency, LibraryIncludeFlags libraryIncludeFlags, LockFileTargetLibrary lockFileTargetLibrary)
         {
             var criteriaKey = new CriteriaKey(graph.TargetGraphName, framework);
-            _lockFileTargetLibraryCache.TryAdd((criteriaKey, lockFileLibrary, libraryDependency, libraryIncludeFlags), lockFileTargetLibrary);
+            return _lockFileTargetLibraryCache.TryAdd((criteriaKey, lockFileLibrary, libraryDependency, libraryIncludeFlags), lockFileTargetLibrary);
         }
 
         private class CriteriaKey : IEquatable<CriteriaKey>
