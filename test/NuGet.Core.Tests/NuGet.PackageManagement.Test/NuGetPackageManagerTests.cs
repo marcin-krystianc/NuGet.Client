@@ -6176,6 +6176,10 @@ namespace NuGet.Test
 
                 Assert.True(telemetryEvents.Where(p => p.Name == "NugetActionSteps").
                     Any(p => (string)p["SubStepName"] == TelemetryConstants.PreviewBuildIntegratedStepName));
+
+                var projectFilePaths = telemetryEvents.Where(p => p.Name == "ProjectRestoreInformation").SelectMany(x => x.GetPiiData()).Where(x => x.Key == "ProjectFilePath");
+                Assert.Equal(2, projectFilePaths.Count());
+                Assert.True(projectFilePaths.All(p => p.Value is string y && File.Exists(y) && (y.EndsWith(".csproj") || y.EndsWith("project.json") || y.EndsWith("proj"))));
             }
         }
 
@@ -6247,6 +6251,10 @@ namespace NuGet.Test
                 Assert.True((string)telemetryEvents
                     .Where(p => p.Name == "ProjectRestoreInformation").
                     Last()["ErrorCodes"] == NuGetLogCode.NU1102.ToString());
+
+                var projectFilePaths = telemetryEvents.Where(p => p.Name == "ProjectRestoreInformation").SelectMany(x => x.GetPiiData()).Where(x => x.Key == "ProjectFilePath");
+                Assert.Equal(2, projectFilePaths.Count());
+                Assert.True(projectFilePaths.All(p => p.Value is string y && File.Exists(y) && (y.EndsWith(".csproj") || y.EndsWith("project.json") || y.EndsWith("proj"))));
             }
         }
 
@@ -6321,6 +6329,10 @@ namespace NuGet.Test
                 Assert.True((string)telemetryEvents
                     .Where(p => p.Name == "ProjectRestoreInformation").
                     Last()["ErrorCodes"] == NuGetLogCode.NU1102.ToString());
+
+                var projectFilePaths = telemetryEvents.Where(p => p.Name == "ProjectRestoreInformation").SelectMany(x => x.GetPiiData()).Where(x => x.Key == "ProjectFilePath");
+                Assert.Equal(2, projectFilePaths.Count());
+                Assert.True(projectFilePaths.All(p => p.Value is string y && File.Exists(y) && (y.EndsWith(".csproj") || y.EndsWith("project.json") || y.EndsWith("proj"))));
             }
         }
 
@@ -6404,6 +6416,11 @@ namespace NuGet.Test
                 Assert.True((string)telemetryEvents
                     .Where(p => p.Name == "ProjectRestoreInformation").
                     Last()["WarningCodes"] == NuGetLogCode.NU1603.ToString());
+
+                var projectFilePaths = telemetryEvents.Where(p => p.Name == "ProjectRestoreInformation").SelectMany(x => x.GetPiiData()).Where(x => x.Key == "ProjectFilePath");
+                Assert.Equal(2, projectFilePaths.Count());
+                Assert.True(projectFilePaths.All(p => p.Value is string y && File.Exists(y) && (y.EndsWith(".csproj") || y.EndsWith("project.json") || y.EndsWith("proj"))));
+
             }
         }
 
@@ -6478,6 +6495,10 @@ namespace NuGet.Test
                 Assert.True((string)telemetryEvents
                     .Where(p => p.Name == "ProjectRestoreInformation").
                     Last()["WarningCodes"] == NuGetLogCode.NU1603.ToString());
+
+                var projectFilePaths = telemetryEvents.Where(p => p.Name == "ProjectRestoreInformation").SelectMany(x => x.GetPiiData()).Where(x => x.Key == "ProjectFilePath");
+                Assert.Equal(2, projectFilePaths.Count());
+                Assert.True(projectFilePaths.All(p => p.Value is string y && File.Exists(y) && (y.EndsWith(".csproj") || y.EndsWith("project.json") || y.EndsWith("proj"))));
             }
         }
 
@@ -6672,11 +6693,14 @@ namespace NuGet.Test
                 Assert.Equal(2, telemetryEvents.Where(p => p.Name == "CreateRestoreTargetGraph").Count());
                 Assert.Equal(2, telemetryEvents.Where(p => p.Name == "NugetActionSteps").Count());
 
-
                 Assert.True(telemetryEvents.Where(p => p.Name == "NugetActionSteps").
                     Any(p => (string)p["SubStepName"] == TelemetryConstants.PreviewBuildIntegratedStepName));
                 Assert.True(telemetryEvents.Where(p => p.Name == "NugetActionSteps").
                     Any(p => (string)p["SubStepName"] == TelemetryConstants.ExecuteActionStepName));
+
+                var projectFilePaths = telemetryEvents.Where(p => p.Name == "ProjectRestoreInformation").SelectMany(x => x.GetPiiData()).Where(x => x.Key == "ProjectFilePath");
+                Assert.Equal(2, projectFilePaths.Count());
+                Assert.True(projectFilePaths.All(p => p.Value is string y && File.Exists(y) && (y.EndsWith(".csproj") || y.EndsWith("project.json") || y.EndsWith("proj"))));
             }
         }
 #endif
@@ -6972,6 +6996,73 @@ namespace NuGet.Test
                 // Assert
                 Assert.Contains("Either should have value in", ex.Message);
                 Assert.Contains(buildIntegratedProjectA.MSBuildProjectPath, ex.Message);
+            }
+        }
+
+        /// <summary>
+        /// Repro for a bug caused by a NullReferenceException being thrown due to a null <see cref="PackageIdentity.Version"/>
+        /// (https://github.com/NuGet/Home/issues/9882).
+        /// </summary>
+        /// <returns></returns>
+        [Fact]
+        public async Task TestPacMan_PreviewInstallPackage_BuildIntegrated_NullVersion_Throws()
+        {
+            // Arrange
+
+            // Set up Package Source
+            var packages = new List<SourcePackageDependencyInfo>
+            {
+                new SourcePackageDependencyInfo("a", new NuGetVersion(1, 0, 0), new PackageDependency[] { }, true, null),
+                new SourcePackageDependencyInfo("a", new NuGetVersion(2, 0, 0), new PackageDependency[] { }, true, null),
+                new SourcePackageDependencyInfo("a", new NuGetVersion(3, 0, 0), new PackageDependency[] { }, true, null),
+            };
+
+            SourceRepositoryProvider sourceRepositoryProvider = CreateSource(packages);
+
+            // Set up NuGetProject
+            var fwk45 = NuGetFramework.Parse("net45");
+
+            var installedPackages = new List<NuGet.Packaging.PackageReference>
+            {
+                new PackageReference(new PackageIdentity("a", new NuGetVersion(1, 0, 0)), fwk45, true),
+            };
+
+            var packageIdentity = _packageWithDependents[0];
+
+            // Create Package Manager
+            using (var solutionManager = new TestSolutionManager())
+            {
+                var nuGetPackageManager = new NuGetPackageManager(
+                    sourceRepositoryProvider,
+                    NullSettings.Instance,
+                    solutionManager,
+                    new TestDeleteOnRestartManager());
+
+                var buildIntegratedProjectA = new Mock<BuildIntegratedNuGetProject>();
+                buildIntegratedProjectA.Setup(p => p.GetInstalledPackagesAsync(CancellationToken.None))
+                    .Returns(() => Task.FromResult(installedPackages.AsEnumerable()));
+
+                var projectList = new List<NuGetProject> { buildIntegratedProjectA.Object };
+                solutionManager.NuGetProjects = projectList;
+
+                // Main Act
+                var targets = new List<PackageIdentity>
+                {
+                    new PackageIdentity("a", null)
+                };
+
+                // Assert
+                var ex = await Assert.ThrowsAsync<NullReferenceException>(async () =>
+                {
+                    IEnumerable<NuGetProjectAction> result = await nuGetPackageManager.PreviewUpdatePackagesAsync(
+                        targets,
+                        projectList,
+                        new ResolutionContext(),
+                        new TestNuGetProjectContext(),
+                        sourceRepositoryProvider.GetRepositories(),
+                        sourceRepositoryProvider.GetRepositories(),
+                        CancellationToken.None);
+                });
             }
         }
 

@@ -50,6 +50,7 @@ namespace NuGet.PackageManagement.UI
         private INuGetUILogger _logger;
         private Task<SearchResultContextInfo> _initialSearchResultTask;
         private readonly Lazy<JoinableTaskFactory> _joinableTaskFactory;
+        private bool _checkBoxesEnabled;
 
         private const string LogEntrySource = "NuGet Package Manager";
 
@@ -98,7 +99,18 @@ namespace NuGet.PackageManagement.UI
             });
         }
 
-        public bool CheckBoxesEnabled { get; set; }
+        public bool CheckBoxesEnabled
+        {
+            get => _checkBoxesEnabled;
+            set
+            {
+                if (_checkBoxesEnabled != value)
+                {
+                    _checkBoxesEnabled = value;
+                    _list.IsItemSelectionEnabled = value;
+                }
+            }
+        }
 
         public bool IsSolution { get; set; }
 
@@ -558,7 +570,7 @@ namespace NuGet.PackageManagement.UI
                     {
                         package.PropertyChanged += Package_PropertyChanged;
                         Items.Add(package);
-                        _selectedCount = package.Selected ? _selectedCount + 1 : _selectedCount;
+                        _selectedCount = package.IsSelected ? _selectedCount + 1 : _selectedCount;
                     }
 
                     if (removed)
@@ -598,9 +610,9 @@ namespace NuGet.PackageManagement.UI
         private void Package_PropertyChanged(object sender, PropertyChangedEventArgs e)
         {
             var package = sender as PackageItemListViewModel;
-            if (e.PropertyName == nameof(package.Selected))
+            if (e.PropertyName == nameof(package.IsSelected))
             {
-                if (package.Selected)
+                if (package.IsSelected)
                 {
                     _selectedCount++;
                 }
@@ -730,7 +742,7 @@ namespace NuGet.PackageManagement.UI
                 // for null here.
                 if (package != null)
                 {
-                    package.Selected = true;
+                    package.IsSelected = true;
                 }
             }
         }
@@ -742,14 +754,14 @@ namespace NuGet.PackageManagement.UI
                 var package = item as PackageItemListViewModel;
                 if (package != null)
                 {
-                    package.Selected = false;
+                    package.IsSelected = false;
                 }
             }
         }
 
         private void _updateButton_Click(object sender, RoutedEventArgs e)
         {
-            var selectedPackages = PackageItemsFiltered.Where(p => p.Selected).ToArray();
+            var selectedPackages = PackageItemsFiltered.Where(p => p.IsSelected).ToArray();
             UpdateButtonClicked(selectedPackages);
         }
 
@@ -759,7 +771,7 @@ namespace NuGet.PackageManagement.UI
             var package = _list.SelectedItem as PackageItemListViewModel;
             if (package != null && e.Key == Key.Space)
             {
-                package.Selected = !package.Selected;
+                package.IsSelected = !package.IsSelected;
                 e.Handled = true;
             }
         }

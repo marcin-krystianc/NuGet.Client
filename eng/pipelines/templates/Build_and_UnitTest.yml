@@ -34,7 +34,7 @@ steps:
 - task: PowerShell@1
   inputs:
     scriptName: "$(Build.Repository.LocalPath)\\scripts\\cibuild\\ConfigureVstsBuild.ps1"
-    arguments: "-BuildCounterFile $(BuildCounterFile) -BuildInfoJsonFile $(BuildInfoJsonFile) -BuildRTM $(BuildRTM) -SkipUpdateBuildNumber"
+    arguments: "-BuildRTM $(BuildRTM)"
   displayName: "Configure VSTS CI Environment"
 
 - task: PublishBuildArtifacts@1
@@ -80,6 +80,15 @@ steps:
       dotnet tool restore
   condition: "and(not(eq(variables['IsOfficialBuild'], 'true')), eq(variables['BuildRTM'], 'true'))"   #skip this task for nonRTM in private build
 
+- task: PowerShell@1
+  displayName: "Prepare for source link"
+  inputs:
+    scriptType: "inlineScript"
+    inlineScript: |
+      git remote add github https://github.com/NuGet/NuGet.Client.git
+      Write-Host "##vso[task.setvariable variable=gitRepositoryRemoteName]github"
+  condition: " and(succeeded(),eq(variables['BuildRTM'], 'false'), eq(variables['IsOfficialBuild'], 'true'))" #run in official non-RTM builds, for generating sourcelink
+
 - task: MSBuild@1
   displayName: "Restore for VS2019"
   inputs:
@@ -94,7 +103,7 @@ steps:
     solution: "build\\build.proj"
     msbuildVersion: "16.0"
     configuration: "$(BuildConfiguration)"
-    msbuildArguments: "/t:BuildNoVSIX /p:BuildRTM=$(BuildRTM) /p:BuildNumber=$(BuildNumber) /p:SkipILMergeOfNuGetExe=true"
+    msbuildArguments: "/t:BuildNoVSIX /p:BuildRTM=$(BuildRTM) /p:BuildNumber=$(BuildNumber) /p:SkipILMergeOfNuGetExe=true /p:GitRepositoryRemoteName=$(gitRepositoryRemoteName)"
 
 - task: MSBuild@1
   displayName: "Ensure msbuild.exe can parse nuget.sln"
@@ -183,11 +192,10 @@ steps:
   displayName: "Initialize Git Commit Status on GitHub"
   inputs:
     scriptType: "inlineScript"
-    arguments: "-VstsPersonalAccessToken $(VstsPersonalAccessToken)"
     inlineScript: |
       . $(Build.Repository.LocalPath)\\scripts\\utils\\PostGitCommitStatus.ps1
-      SetCommitStatusForTestResult -PersonalAccessToken $(NuGetLurkerPersonalAccessToken) -VstsPersonalAccessToken $(VstsPersonalAccessToken) -CommitSha $(Build.SourceVersion) -TestName "$env:AGENT_JOBNAME"
-  condition: "always()"
+      SetCommitStatusForTestResult -PersonalAccessToken $(NuGetLurkerPersonalAccessToken) -VstsPersonalAccessToken $(System.AccessToken) -CommitSha $(Build.SourceVersion) -TestName "$env:AGENT_JOBNAME"
+  condition: "not(eq(variables['ManualGitHubChecks'], 'false'))"
 
 - task: PublishBuildArtifacts@1
   displayName: "Publish NuGet.CommandLine.Test as artifact"
@@ -213,6 +221,15 @@ steps:
     msbuildVersion: "16.0"
     configuration: "$(BuildConfiguration)"
     msbuildArguments: "/t:Pack /p:BuildRTM=$(BuildRTM) /p:ExcludeTestProjects=$(BuildRTM) /p:BuildNumber=$(BuildNumber)"
+  condition: and(succeeded(), or(eq(variables['IsOfficialBuild'], 'true'), eq(variables['BuildRTM'], 'true')))  #skip this task for nonRTM in private build
+
+- task: MSBuild@1
+  displayName: "Ensure all Nupkgs and Symbols are created"
+  inputs:
+    solution: "build\\build.proj"
+    msbuildVersion: "16.0"
+    configuration: "$(BuildConfiguration)"
+    msbuildArguments: "/t:EnsurePackagesExist /p:ExcludeTestProjects=$(BuildRTM)"
   condition: and(succeeded(), or(eq(variables['IsOfficialBuild'], 'true'), eq(variables['BuildRTM'], 'true')))  #skip this task for nonRTM in private build
 
 - task: MSBuild@1
@@ -399,12 +416,21 @@ steps:
   condition: "and(succeeded(),eq(variables['BuildRTM'], 'false'))"
 
 - task: CopyFiles@2
-  displayName: "Copy LCG Files"
+  displayName: "Copy LCG Files (deprecated)"
   inputs:
     SourceFolder: "artifacts\\"
-    Contents: "**\\*.lcg"
+    Contents: |
+      **\*.lcg
+      !localize\**\*
     TargetFolder: "$(CIRoot)\\PLOC\\$(Build.SourceBranchName)\\$(Build.BuildNumber)"
-  condition: " and(succeeded(),eq(variables['BuildRTM'], 'false'), eq(variables['IsOfficialBuild'], 'true')) "
+  condition: "and(succeeded(), eq(variables['BuildRTM'], 'false'), eq(variables['IsOfficialBuild'], 'true'))"
+
+- task: PublishPipelineArtifact@1
+  displayName: "Upload localizeInputs artifact"
+  inputs:
+    targetPath: "$(Build.Repository.LocalPath)\\artifacts\\localize\\"
+    artifactName: "localizeInputs"
+  condition: "and(succeeded(), eq(variables['BuildRTM'], 'false'), eq(variables['IsOfficialBuild'], 'true'))"
 
 - task: NuGetCommand@2
   displayName: Publish public Nuget packages to nuget-build

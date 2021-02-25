@@ -406,9 +406,9 @@ namespace NuGet.PackageManagement.UI
         private async Task PackageManagerLoadedAsync()
         {
             var timeSpan = GetTimeSinceLastRefreshAndRestart();
-            // Do not trigger a refresh if the browse tab is open and this is not the first load of the control.
+            // Do not trigger a refresh if this is not the first load of the control.
             // The loaded event is triggered once all the data binding has occurred, which effectively means we'll just display what was loaded earlier and not trigger another search
-            if (!(_loadedAndInitialized && _topPanel.Filter == ItemFilter.All))
+            if (!_loadedAndInitialized)
             {
                 _loadedAndInitialized = true;
                 ResetTabDataLoadFlags();
@@ -891,13 +891,6 @@ namespace NuGet.PackageManagement.UI
                 }
 
                 FlagTabDataAsLoaded(filterToRender);
-
-                // Loading Data on Installed tab should also consider the Data on Updates tab as loaded to indicate
-                // UI filtering for Updates is ready.
-                if (filterToRender == ItemFilter.Installed)
-                {
-                    FlagTabDataAsLoaded(ItemFilter.UpdatesAvailable);
-                }
             }
             catch (OperationCanceledException)
             {
@@ -918,8 +911,7 @@ namespace NuGet.PackageManagement.UI
             if (loadContext.IsSolution == false
                 && _topPanel.Filter == ItemFilter.All
                 && searchText == string.Empty
-                && SelectedSource.PackageSources.Count() == 1
-                && TelemetryUtility.IsNuGetOrg(SelectedSource.PackageSources.First()?.Source))
+                && SelectedSource.PackageSources.Any(item => TelemetryUtility.IsNuGetOrg(item.Source)))
             {
                 _recommendPackages = true;
             }
@@ -1398,7 +1390,7 @@ namespace NuGet.PackageManagement.UI
             {
                 foreach (var packageItem in _packageList.PackageItems)
                 {
-                    packageItem.Selected = true;
+                    packageItem.IsSelected = true;
                 }
             }
             else if (updatePackageOptions.PackagesToUpdate.Any())
@@ -1406,7 +1398,7 @@ namespace NuGet.PackageManagement.UI
                 var packagesToSelect = new HashSet<string>(updatePackageOptions.PackagesToUpdate);
                 foreach (var packageItem in _packageList.PackageItems)
                 {
-                    packageItem.Selected = packagesToSelect.Contains(packageItem.Id, StringComparer.OrdinalIgnoreCase);
+                    packageItem.IsSelected = packagesToSelect.Contains(packageItem.Id, StringComparer.OrdinalIgnoreCase);
                 }
             }
         }
@@ -1494,8 +1486,6 @@ namespace NuGet.PackageManagement.UI
                     Model.CachedUpdates = null;
                     ResetTabDataLoadFlags();
 
-                    _actionCompleted?.Invoke(this, EventArgs.Empty);
-                    NuGetEventTrigger.Instance.TriggerEvent(NuGetEvent.PackageOperationEnd);
                     IsEnabled = true;
                     _isExecutingAction = false;
                     if (_isRefreshRequired)
@@ -1505,6 +1495,9 @@ namespace NuGet.PackageManagement.UI
                         EmitRefreshEvent(timeSinceLastRefresh, RefreshOperationSource.ExecuteAction, RefreshOperationStatus.Success);
                         _isRefreshRequired = false;
                     }
+
+                    _actionCompleted?.Invoke(this, EventArgs.Empty);
+                    NuGetEventTrigger.Instance.TriggerEvent(NuGetEvent.PackageOperationEnd);
                 }
             })
             .PostOnFailure(nameof(PackageManagerControl), nameof(ExecuteAction));
@@ -1553,7 +1546,7 @@ namespace NuGet.PackageManagement.UI
         private void PackageList_UpdateButtonClicked(PackageItemListViewModel[] selectedPackages)
         {
             var packagesToUpdate = selectedPackages
-                .Select(package => new PackageIdentity(package.Id, package.LatestVersion))
+                .Select(package => new PackageIdentity(package.Id, package.Version))
                 .ToList();
 
             UpdatePackage(packagesToUpdate);
