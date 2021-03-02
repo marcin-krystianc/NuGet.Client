@@ -73,7 +73,7 @@ namespace NuGet.Commands
         }
 
         /// <summary>
-        /// Try to get a LockFileTargetLibrary from cache.
+        /// Try to get a LockFileTargetLibrary from the cache.
         /// </summary>
         public LockFileTargetLibrary TryGetLockFileTargetLibrary(RestoreTargetGraph graph, NuGetFramework framework, LockFileLibrary lockFileLibrary, LibraryDependency libraryDependency, LibraryIncludeFlags libraryIncludeFlags)
         {
@@ -87,7 +87,7 @@ namespace NuGet.Commands
         }
 
         /// <summary>
-        /// Add the LockFileTargetLibrary to cache.
+        /// Add the LockFileTargetLibrary to the cache.
         /// </summary>
         public bool TryAddLockFileTargetLibrary(RestoreTargetGraph graph, NuGetFramework framework, LockFileLibrary lockFileLibrary, LibraryDependency libraryDependency, LibraryIncludeFlags libraryIncludeFlags, LockFileTargetLibrary lockFileTargetLibrary)
         {
